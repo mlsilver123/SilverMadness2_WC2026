@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Silver Madness 2">
+<meta name="theme-color" content="#070c18">
+<title>Silver Madness 2 — World Cup Warrior</title>
+<style>
+:root{
+  --bg:#070c18; --card:#111827; --card2:#1a2236; --border:#243052;
+  --text:#e2e8f0; --muted:#8896b3; --orange:#f97316; --blue:#3b82f6;
+  --green:#22c55e; --red:#ef4444; --purple:#a855f7; --pink:#ec4899;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+}
+*{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+body{background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; min-height:100vh; -webkit-text-size-adjust:100%;}
+button{font-family:inherit; cursor:pointer;}
+.hidden{display:none !important;}
+.btn{padding:.6rem 1.1rem; border-radius:.55rem; border:none; font-size:.9rem; font-weight:700; transition:filter .15s, background .15s;}
+.btn:active{transform:scale(.98);}
+.btn-primary{background:var(--orange); color:#fff;} .btn-primary:hover{filter:brightness(1.08);}
+.btn-blue{background:var(--blue); color:#fff;}
+.btn-green{background:var(--green); color:#fff;}
+.btn-ghost{background:var(--card2); color:var(--text); border:1px solid var(--border);}
+.btn-ghost:hover{border-color:var(--muted);}
+.btn-sm{padding:.35rem .7rem; font-size:.78rem; border-radius:.45rem;}
+
+/* PASSWORD */
+.pw-wrap{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:1.5rem;}
+.pw-card{background:var(--card); border:1px solid var(--border); border-radius:1rem; padding:2.5rem 2rem; width:100%; max-width:400px; text-align:center;}
+.pw-card .logo{font-size:1.4rem; font-weight:800; color:var(--orange); margin-bottom:.4rem;}
+.pw-card .tag{color:var(--muted); font-size:.8rem; margin-bottom:1.5rem; letter-spacing:.02em;}
+.pw-card input{width:100%; padding:.85rem 1rem; background:var(--card2); border:1px solid var(--border); border-radius:.6rem; color:var(--text); font-size:16px; text-align:center; letter-spacing:.15em; margin-bottom:.75rem; outline:none;}
+.pw-card input:focus{border-color:var(--orange);}
+.pw-err{color:var(--red); font-size:.8rem; height:1rem; margin-top:.2rem;}
+
+/* HEADER / NAV */
+header{background:var(--card); border-bottom:1px solid var(--border); padding:calc(.7rem + var(--safe-t)) 1rem .7rem; position:sticky; top:0; z-index:100;}
+.head-row{display:flex; align-items:center; gap:1rem; flex-wrap:wrap;}
+.logo{font-size:1.05rem; font-weight:800; color:var(--orange); white-space:nowrap;}
+.logo small{color:var(--muted); font-weight:600; font-size:.7rem; display:block; letter-spacing:.03em;}
+.top-nav{display:flex; gap:.25rem; margin-left:auto; flex-wrap:wrap;}
+.nav-btn{padding:.5rem .9rem; border-radius:.5rem; border:none; background:transparent; color:var(--muted); font-size:.85rem; font-weight:600;}
+.nav-btn.active{background:var(--card2); color:var(--text);}
+.nav-btn:hover{color:var(--text);}
+
+main{max-width:1100px; margin:0 auto; padding:1rem 1rem calc(1rem + var(--safe-b));}
+@media(max-width:760px){ main{padding-bottom:calc(74px + var(--safe-b));} }
+
+/* BOTTOM NAV (mobile) */
+.bottom-nav{display:none;}
+@media(max-width:760px){
+  .top-nav{display:none;}
+  .bottom-nav{display:flex; position:fixed; bottom:0; left:0; right:0; z-index:200;
+    background:#0a1120; border-top:1px solid var(--border); padding:.5rem .25rem var(--safe-b);}
+  .bn-item{flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; background:none; border:none; color:var(--muted); padding:.3rem 0; min-height:48px;}
+  .bn-item .ti{font-size:1.35rem;}
+  .bn-item span{font-size:.6rem; font-weight:600;}
+  .bn-item.active{color:var(--orange);}
+}
+
+/* GENERIC */
+h2.page-title{font-size:1.2rem; font-weight:800; margin-bottom:.85rem;}
+.card{background:var(--card); border:1px solid var(--border); border-radius:.75rem; padding:1rem 1.1rem;}
+.muted{color:var(--muted);}
+.empty-state{text-align:center; color:var(--muted); padding:3rem 1rem;}
+.empty-state .ti{font-size:2.5rem; display:block; margin-bottom:.6rem; opacity:.5;}
+.pill{display:inline-flex; align-items:center; border-radius:999px; padding:.12rem .5rem; font-size:.62rem; font-weight:700; background:var(--card2); color:var(--muted);}
+.pill.elig{background:rgba(34,197,94,.15); color:var(--green);}
+.pos-chip{display:inline-flex; background:var(--card2); color:var(--muted); font-size:.6rem; font-weight:700; padding:.12rem .4rem; border-radius:.25rem;}
+
+/* STATUS BAR */
+.status-bar{background:var(--card); border:1px solid var(--border); border-radius:.75rem; padding:1rem 1.1rem; margin-bottom:1rem;}
+.status-badges{display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin-bottom:.55rem;}
+.status-badge{background:var(--orange); color:#fff; border-radius:999px; padding:.28rem .8rem; font-size:.74rem; font-weight:700;}
+.status-badge.blue{background:var(--blue);} .status-badge.muted{background:var(--card2); color:var(--muted);}
+.req-note{border-radius:.5rem; padding:.5rem .8rem; font-size:.78rem; margin-top:.5rem;}
+.req-ok{background:rgba(34,197,94,.1); border:1px solid var(--green); color:var(--green);}
+.req-warn{background:rgba(249,115,22,.1); border:1px solid var(--orange); color:var(--orange);}
+
+/* DRAFT BOARD (desktop oriented) */
+.board-scroll{overflow-x:auto; border-radius:.75rem; -webkit-overflow-scrolling:touch;}
+.draft-grid{display:grid; gap:1px; background:var(--border); border:1px solid var(--border); border-radius:.75rem; overflow:hidden; min-width:780px;}
+.dg-head{background:var(--card2); padding:.55rem .35rem; font-size:.66rem; font-weight:700; text-align:center; color:var(--muted); text-transform:uppercase; letter-spacing:.03em;}
+.dg-head.current{background:rgba(249,115,22,.18); color:var(--orange);}
+.dg-rl{background:var(--card2); display:flex; align-items:center; justify-content:center; font-size:.66rem; font-weight:700; color:var(--muted);}
+.dg-cell{background:var(--card); padding:.35rem .4rem; min-height:52px; display:flex; flex-direction:column; justify-content:center; gap:.1rem;}
+.dg-cell.current-slot{background:rgba(249,115,22,.08); box-shadow:inset 0 0 0 2px var(--orange);}
+.dg-name{font-size:.72rem; font-weight:700; line-height:1.1;}
+.dg-team{font-size:.6rem; color:var(--muted);}
+.dg-elig{width:6px; height:6px; border-radius:50%; background:var(--green); display:inline-block; margin-left:3px;}
+
+/* PICKER */
+.picker{margin-top:1rem;}
+.picker-controls{display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:.7rem;}
+.picker input[type=text]{flex:1; min-width:160px; padding:.6rem .8rem; background:var(--card2); border:1px solid var(--border); border-radius:.55rem; color:var(--text); font-size:16px; outline:none;}
+.picker input[type=text]:focus{border-color:var(--orange);}
+.filter-chip{padding:.4rem .75rem; border-radius:.5rem; border:1px solid var(--border); background:transparent; color:var(--muted); font-size:.76rem; font-weight:700;}
+.filter-chip.active{background:var(--orange); color:#fff; border-color:var(--orange);}
+.filter-chip.elig.active{background:var(--green); border-color:var(--green);}
+.player-list{display:flex; flex-direction:column; gap:.4rem; max-height:460px; overflow-y:auto;}
+.pl-row{display:flex; align-items:center; gap:.55rem; background:var(--card); border:1px solid var(--border); border-radius:.55rem; padding:.55rem .7rem;}
+.pl-row.elig{border-color:rgba(34,197,94,.4);}
+.pl-name{flex:1; font-size:.86rem; font-weight:600;}
+.pl-draft{background:var(--orange); color:#fff; border:none; padding:.4rem .8rem; border-radius:.45rem; font-size:.74rem; font-weight:700; min-height:36px;}
+
+/* STANDINGS */
+.stand-row{padding:.7rem .25rem;}
+.stand-row + .stand-row{border-top:1px solid var(--border);}
+.stand-top{display:flex; align-items:center; gap:.5rem;}
+.stand-rank{width:18px; font-weight:800; color:var(--muted); text-align:center; font-size:.8rem; flex-shrink:0;}
+.stand-name{flex:1; min-width:0; font-size:.9rem; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.stand-remain{display:inline-flex; align-items:center; gap:4px; font-size:.7rem; font-weight:700; color:var(--green); background:rgba(34,197,94,.12); padding:.16rem .5rem; border-radius:999px; flex-shrink:0;}
+.stand-remain.none{color:var(--muted); background:var(--card2);}
+.stand-remain .dot{width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0;}
+.stand-pts{min-width:36px; text-align:right; font-weight:800; font-size:.96rem; flex-shrink:0;}
+.stand-ded{color:var(--red); font-weight:700; font-size:.72rem;}
+.stand-stack{height:15px; background:var(--card2); border-radius:4px; overflow:hidden; margin-top:.5rem;}
+.stand-fillwrap{display:flex; height:100%; border-radius:4px; overflow:hidden;}
+.stand-fillwrap > span{height:100%;}
+.stand-key{display:flex; flex-wrap:wrap; gap:.4rem 1rem; justify-content:center; margin-top:.7rem;}
+.lg-item{display:inline-flex; align-items:center; gap:.35rem; font-size:.72rem; color:var(--muted); font-weight:600;}
+.lg-dot{width:10px; height:10px; border-radius:3px; display:inline-block;}
+.stand-source{font-size:.7rem; color:var(--muted); text-align:center; margin-top:.8rem; line-height:1.45;}
+.stand-source a{color:var(--blue);}
+
+/* SQUAD ACCORDION */
+.squad-tabs{display:flex; gap:.35rem; overflow-x:auto; padding-bottom:.5rem; margin-bottom:.6rem; -webkit-overflow-scrolling:touch;}
+.squad-tab{white-space:nowrap; padding:.45rem .8rem; border-radius:.5rem; border:1px solid var(--border); background:transparent; color:var(--muted); font-size:.78rem; font-weight:700;}
+.squad-tab.active{background:var(--card2); color:var(--text); border-color:var(--muted);}
+.squad-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:.6rem;}
+.squad-total{font-size:.8rem; color:var(--muted);} .squad-total b{color:var(--text); font-size:1rem;}
+.expand-toggle{background:none; border:none; color:var(--blue); font-size:.76rem; font-weight:700;}
+.pcard{background:var(--card); border:1px solid var(--border); border-radius:.6rem; margin-bottom:.5rem; overflow:hidden;}
+.pcard.out{opacity:.58;}
+.pcard-head{display:flex; align-items:center; gap:.55rem; padding:.7rem .8rem; cursor:pointer; min-height:48px;}
+.pcard-name{flex:1; font-size:.9rem; font-weight:600;}
+.pcard-name .strike{text-decoration:line-through;}
+.pcard-total{font-size:.95rem; font-weight:800; color:var(--orange);}
+.pcard-total.dim{color:var(--text);}
+.chev{color:var(--muted); font-size:1.1rem; transition:transform .2s;}
+.pcard.open .chev{transform:rotate(180deg);}
+.pcard-body{padding:0 .8rem .8rem; display:none;}
+.pcard.open .pcard-body{display:block;}
+.round-bar{display:flex; height:7px; border-radius:4px; overflow:hidden; background:var(--card2); margin-bottom:.5rem;}
+.ledger-row{display:flex; align-items:flex-start; gap:.5rem; background:#0d1322; border-radius:.45rem; padding:.45rem .6rem; margin-bottom:.35rem;}
+.ledger-rnd{font-size:.6rem; font-weight:700; color:var(--muted); background:var(--card2); padding:.15rem .4rem; border-radius:.25rem; min-width:34px; text-align:center; margin-top:1px;}
+.ledger-rnd.knock{background:rgba(168,85,247,.18); color:var(--purple);}
+.chips{flex:1; display:flex; flex-wrap:wrap; gap:.25rem;}
+.chip{font-size:.66rem; font-weight:600; padding:.12rem .45rem; border-radius:.35rem; background:var(--card2); color:#94a3b8;}
+.chip.goal{background:rgba(249,115,22,.16); color:#fb923c;}
+.chip.assist{background:rgba(59,130,246,.16); color:#60a5fa;}
+.chip.cs{background:rgba(34,197,94,.16); color:#4ade80;}
+.chip.neg{background:rgba(239,68,68,.16); color:#f87171;}
+.ledger-pts{font-size:.78rem; font-weight:800; margin-top:1px;}
+
+/* TABLES */
+.tbl{width:100%; border-collapse:collapse; font-size:.82rem;}
+.tbl th{text-align:left; color:var(--muted); font-weight:700; font-size:.7rem; text-transform:uppercase; letter-spacing:.03em; padding:.5rem .4rem; border-bottom:1px solid var(--border);}
+.tbl td{padding:.5rem .4rem; border-bottom:1px solid var(--border);}
+.tbl tr:last-child td{border-bottom:none;}
+.scroll-x{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+
+/* SCORING RUBRIC */
+.rubric-grid{display:grid; grid-template-columns:1fr auto; gap:.1rem .5rem;}
+.rubric-row{display:contents;}
+.rubric-row > div{padding:.55rem .2rem; border-bottom:1px solid var(--border);}
+.rubric-label{color:var(--text); font-size:.86rem;}
+.rubric-val{text-align:right; font-weight:800; font-family:ui-monospace,monospace;}
+.rubric-val.pos{color:var(--green);} .rubric-val.neg{color:var(--red);}
+.section-h{font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:700; margin:1.1rem 0 .4rem;}
+
+.toolbar{display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1rem;}
+.banner{background:rgba(59,130,246,.1); border:1px solid var(--blue); border-radius:.6rem; padding:.7rem .9rem; font-size:.8rem; color:#bfdbfe; margin-bottom:1rem; display:flex; gap:.5rem; align-items:flex-start;}
+.banner .ti{color:var(--blue); font-size:1.1rem; flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg)}} .spin{animation:spin 1s linear infinite; display:inline-block;}
+</style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.7.0/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div id="pwScreen" class="pw-wrap">
+  <div class="pw-card">
+    <div class="logo">Silver Madness 2</div>
+    <div class="tag">THE WORLD CUP WARRIOR</div>
+    <input id="pwInput" type="password" inputmode="text" placeholder="enter password" autocomplete="off">
+    <div class="pw-err" id="pwErr"></div>
+    <button class="btn btn-primary" style="width:100%;" onclick="checkPw()">Enter</button>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <div class="head-row">
+      <div class="logo">Silver Madness 2<small>WORLD CUP WARRIOR · 2026</small></div>
+      <nav class="top-nav" id="topNav"></nav>
+    </div>
+  </header>
+  <main id="view"></main>
+  <nav class="bottom-nav" id="bottomNav"></nav>
+</div>
+
+<script>
+/* ===== Silver Madness 2 — World Cup Warrior (live, Supabase-backed) ===== */
+const PASSWORD='WC2026';
+const SUPABASE_URL='https://uhunnncneghyfatbheaf.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVodW5ubmNuZWdoeWZhdGJoZWFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NDc4MTMsImV4cCI6MjA5NjQyMzgxM30.xNOdTwT8gIXEfTjV3y7NXO_aQpTf0Iv1dM31zLXA3AQ';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const SCORING={ goal:{GK:10,DEF:6,MID:5,FWD:4}, assist:3, played60:2, appearance:1,
+  cleanSheet:{GK:4,DEF:4,MID:1,FWD:0}, penSave:2, yellow:-1, red:-3, ownGoal:-2, penMiss:-2 };
+const POS_ORDER={GK:0,DEF:1,MID:2,FWD:3};
+const RANKING_SNAPSHOT={ date:'6 June 2026', source:'https://inside.fifa.com/fifa-world-ranking/men',
+  eligible:[['Paraguay',40],['Czechia',41],['Scotland',43],['DR Congo',45],['Tunisia',46],['Uzbekistan',50],
+    ['Qatar',55],['Iraq',57],['South Africa',60],['Saudi Arabia',61],['Jordan',63],['Bosnia & Herzegovina',64],
+    ['Cabo Verde',68],['Ghana',73],['Haiti',82],['Curaçao',83],['New Zealand',85]] };
+
+/* ===== loaded data ===== */
+let DATA={ players:[], byId:{}, order:[], cfg:{picks_per:11, require_gk:1, require_underdog:2} };
+let state={ picks:[] };
+let ui={ page:'draft', squadMgr:0, filter:'all', search:'', loading:true, error:'' };
+
+/* ===== helpers ===== */
+function normName(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim(); }
+function findPlayerByName(q){ const n=normName(q); const exact=DATA.players.find(p=>normName(p.name)===n); if(exact) return exact;
+  const m=DATA.players.filter(p=>normName(p.name).includes(n)); return m.length===1?m[0]:null; }
+function mgrLabel(m){ return (m&&m.emoji?m.emoji+' ':'')+(m?m.display_name:''); }
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* ===== provider (Supabase) ===== */
+const provider={
+  async loadStatic(){
+    const [pl,mg,ds]=await Promise.all([
+      sb.from('players').select('*'),
+      sb.from('managers').select('*').order('draft_position'),
+      sb.from('draft_state').select('*').eq('id',1).single()
+    ]);
+    if(pl.error) throw pl.error; if(mg.error) throw mg.error; if(ds.error) throw ds.error;
+    DATA.players=pl.data||[]; DATA.byId=Object.fromEntries(DATA.players.map(p=>[p.id,p]));
+    DATA.order=mg.data||[];
+    if(ds.data){ DATA.cfg={ picks_per:ds.data.picks_per||11,
+      require_gk:(ds.data.require_gk==null?1:ds.data.require_gk),
+      require_underdog:(ds.data.require_underdog==null?2:ds.data.require_underdog) }; }
+  },
+  async loadPicks(){ const {data,error}=await sb.from('picks').select('*').order('overall'); if(error) throw error;
+    state.picks=(data||[]).map(p=>({ ...p, mgrIdx:DATA.order.findIndex(m=>m.slot===p.manager_slot) })); },
+  async insertPick(row){ const {error}=await sb.from('picks').insert(row); if(error) throw error; },
+  async delPick(overall,pass){ const {error}=await sb.rpc('commissioner_delete_pick',{p_overall:overall,p_pass:pass}); if(error) throw error; },
+  async editPickRpc(overall,newId,pass){ const {error}=await sb.rpc('commissioner_edit_pick',{p_overall:overall,p_new_player_id:newId,p_pass:pass}); if(error) throw error; },
+  subscribe(cb){ sb.channel('sm2-draft')
+    .on('postgres_changes',{event:'*',schema:'public',table:'picks'},cb)
+    .on('postgres_changes',{event:'*',schema:'public',table:'managers'},cb)
+    .on('postgres_changes',{event:'*',schema:'public',table:'draft_state'},cb)
+    .subscribe(); },
+  getPlayer(id){ return DATA.byId[id]; },
+  isEligible(id){ const p=DATA.byId[id]; return !!(p&&p.underdog); }
+};
+
+/* ===== draft math (snake) ===== */
+function NUM(){ return DATA.order.length; }
+function PER(){ return DATA.cfg.picks_per; }
+function TOTAL(){ return NUM()*PER(); }
+function pickerForIndex(n){ const N=NUM(); const r=Math.floor(n/N); const i=n%N; return r%2===0? i : N-1-i; }
+function currentPickInfo(){ const N=NUM(); if(!N) return null; const n=state.picks.length; if(n>=TOTAL()) return null;
+  return { idx0:n, overall:n+1, round:Math.floor(n/N)+1, mgrIdx:pickerForIndex(n), pickInRound:(n%N)+1 }; }
+function squadOfIdx(mgrIdx){ const slot=DATA.order[mgrIdx]&&DATA.order[mgrIdx].slot; return state.picks.filter(p=>p.manager_slot===slot); }
+function draftedIds(){ return new Set(state.picks.map(p=>p.player_id)); }
+function isComplete(){ return NUM()>0 && state.picks.length>=TOTAL(); }
+function gkCount(i){ return squadOfIdx(i).filter(p=>DATA.byId[p.player_id]&&DATA.byId[p.player_id].position==='GK').length; }
+function udCount(i){ return squadOfIdx(i).filter(p=>provider.isEligible(p.player_id)).length; }
+function remainingAfter(i){ return PER()-squadOfIdx(i).length-1; }
+function mustGK(i){ return (DATA.cfg.require_gk-gkCount(i))>remainingAfter(i); }
+function mustUD(i){ return (DATA.cfg.require_underdog-udCount(i))>remainingAfter(i); }
+function canDraft(i,id){ const p=DATA.byId[id]; if(!p) return false;
+  if(mustGK(i)&&p.position!=='GK') return false;
+  if(mustUD(i)&&!p.underdog) return false;
+  return true; }
+
+/* ===== actions ===== */
+async function makePick(id){ const info=currentPickInfo(); if(!info) return; if(draftedIds().has(id)) return;
+  const mgr=DATA.order[info.mgrIdx];
+  if(!canDraft(info.mgrIdx,id)){ alert(mgrLabel(mgr)+' must use this pick to meet a roster requirement ('+DATA.cfg.require_gk+' GK, '+DATA.cfg.require_underdog+' underdog).'); return; }
+  try{
+    await provider.insertPick({ overall:info.overall, round:info.round, manager_slot:mgr.slot, player_id:id });
+    await provider.loadPicks(); render();
+  }catch(e){ await provider.loadPicks(); render();
+    alert('That pick didn\u2019t go through \u2014 someone may have just taken that player or that slot. The board has been refreshed.'); }
+}
+function commishPass(){ let p=''; try{ p=sessionStorage.getItem('sm2_cp')||''; }catch(e){}
+  if(!p){ p=prompt('Commissioner passcode:')||''; if(p){ try{ sessionStorage.setItem('sm2_cp',p); }catch(e){} } } return p; }
+function clearCommishPass(){ try{ sessionStorage.removeItem('sm2_cp'); }catch(e){} }
+async function undoLast(){ if(!state.picks.length) return; const last=state.picks[state.picks.length-1];
+  const nm=(DATA.byId[last.player_id]&&DATA.byId[last.player_id].name)||'pick';
+  if(!confirm('Undo pick #'+last.overall+' ('+nm+')?')) return;
+  const pass=commishPass(); if(!pass) return;
+  try{ await provider.delPick(last.overall,pass); await provider.loadPicks(); render(); }
+  catch(e){ clearCommishPass(); alert('Not authorized, or the undo failed. Check the commissioner passcode and try again.'); }
+}
+async function editPickPrompt(){ if(!state.picks.length){ alert('No picks to edit yet.'); return; }
+  const n=prompt('Edit which overall pick number? (1\u2013'+state.picks.length+')'); if(!n) return;
+  const ov=parseInt(n,10); const pk=state.picks.find(p=>p.overall===ov);
+  if(!pk){ alert('No pick #'+n+'.'); return; }
+  const nm=prompt('Replace '+( (DATA.byId[pk.player_id]&&DATA.byId[pk.player_id].name)||'this pick')+' with which player? Type a name:'); if(!nm) return;
+  const pl=findPlayerByName(nm); if(!pl){ alert('No single player matched \u201c'+nm+'\u201d. Try a fuller or more exact name.'); return; }
+  if(draftedIds().has(pl.id)&&pl.id!==pk.player_id){ alert(pl.name+' is already drafted.'); return; }
+  const pass=commishPass(); if(!pass) return;
+  try{ await provider.editPickRpc(ov,pl.id,pass); await provider.loadPicks(); render(); }
+  catch(e){ clearCommishPass(); alert('Not authorized, or the edit failed. Check the commissioner passcode and try again.'); }
+}
+
+/* ===== nav + render ===== */
+const NAV=[{id:'draft',label:'Draft'},{id:'standings',label:'Standings'},{id:'squads',label:'Squads'},
+  {id:'players',label:'Picks'},{id:'scoring',label:'Scoring'},{id:'undrafted',label:'Available'},{id:'tools',label:'Commissioner'}];
+const BOTTOM=['draft','squads','players','scoring','more'];
+function go(page){ ui.page=page; window.scrollTo(0,0); render(); }
+function renderNav(){
+  document.getElementById('topNav').innerHTML=NAV.map(n=>`<button class="nav-btn ${ui.page===n.id?'active':''}" onclick="go('${n.id}')">${n.label}</button>`).join('');
+  const bmap={draft:'ti-clipboard-list',squads:'ti-users',players:'ti-list-numbers',scoring:'ti-calculator',more:'ti-dots'};
+  const blab={draft:'Draft',squads:'Squads',players:'Picks',scoring:'Scoring',more:'More'};
+  const activeMore=!['draft','squads','players','scoring'].includes(ui.page);
+  document.getElementById('bottomNav').innerHTML=BOTTOM.map(id=>{
+    const act=id==='more'?activeMore:ui.page===id;
+    return `<button class="bn-item ${act?'active':''}" onclick="go('${id}')"><i class="ti ${bmap[id]}"></i><span>${blab[id]}</span></button>`;
+  }).join('');
+}
+function render(){ renderNav(); const v=document.getElementById('view');
+  if(ui.loading){ v.innerHTML='<div class="empty-state"><i class="ti ti-loader-2 spin"></i><p>Loading the draft\u2026</p></div>'; return; }
+  if(ui.error){ v.innerHTML='<div class="empty-state"><i class="ti ti-plug-connected-x"></i><p>'+esc(ui.error)+'</p><p class="muted" style="font-size:.82rem">Check your connection and reload the page.</p></div>'; return; }
+  const p=ui.page;
+  if(p==='draft') v.innerHTML=viewDraft();
+  else if(p==='standings') v.innerHTML=viewStandings();
+  else if(p==='squads') v.innerHTML=viewSquads();
+  else if(p==='players') v.innerHTML=viewPicksLog();
+  else if(p==='scoring') v.innerHTML=viewScoring();
+  else if(p==='undrafted') v.innerHTML=viewUndrafted();
+  else if(p==='tools') v.innerHTML=viewCommish();
+  else if(p==='more') v.innerHTML=viewMore();
+}
+function emptyState(icon,msg,sub){ return `<div class="empty-state"><i class="ti ${icon}"></i><p>${msg}</p>${sub?`<p class="muted" style="font-size:.82rem">${sub}</p>`:''}</div>`; }
+
+/* ===== VIEW: DRAFT ===== */
+function reqNote(i){
+  const gk=gkCount(i), ud=udCount(i), nGK=mustGK(i), nUD=mustUD(i);
+  const cls=(nGK||nUD)?'req-warn':'req-ok'; let msg;
+  if(nGK&&nUD) msg='<i class="ti ti-alert-triangle"></i> This pick must be a goalkeeper from a team ranked 40th or lower.';
+  else if(nGK) msg='<i class="ti ti-alert-triangle"></i> This pick must be a goalkeeper ('+gk+' of '+DATA.cfg.require_gk+').';
+  else if(nUD) msg='<i class="ti ti-alert-triangle"></i> This pick must be from a team ranked 40th or lower ('+ud+' of '+DATA.cfg.require_underdog+').';
+  else msg='Requirement so far: '+gk+' of '+DATA.cfg.require_gk+' GK \u00b7 '+ud+' of '+DATA.cfg.require_underdog+' underdog.';
+  return '<div class="req-note '+cls+'">'+msg+'</div>';
+}
+function viewDraft(){
+  if(!NUM()){ return emptyState('ti-users','No managers loaded.','Check the managers table in Supabase.'); }
+  const info=currentPickInfo(); let status;
+  if(!info){
+    status=`<div class="status-bar"><div class="status-badges"><span class="status-badge" style="background:var(--green)">Draft complete</span><span class="status-badge muted">${TOTAL()} picks</span></div><div class="muted" style="font-size:.85rem">Every squad is set. Standings light up once the tournament starts.</div></div>`;
+  } else {
+    const mgr=DATA.order[info.mgrIdx];
+    status=`<div class="status-bar">
+      <div class="status-badges">
+        <span class="status-badge">Round ${info.round} of ${PER()}</span>
+        <span class="status-badge blue">Pick ${info.pickInRound} of ${NUM()}</span>
+        <span class="status-badge muted">#${info.overall} overall</span>
+      </div>
+      <div style="font-size:1.05rem; font-weight:800; margin-bottom:.2rem">${mgrLabel(mgr)} is on the clock</div>
+      ${reqNote(info.mgrIdx)}</div>`;
+  }
+  return status + draftBoard() + picker();
+}
+function draftBoard(){
+  const N=NUM(), info=currentPickInfo();
+  const cols='40px '+Array(N).fill('minmax(96px,1fr)').join(' ');
+  let html=`<div class="board-scroll"><div class="draft-grid" style="grid-template-columns:${cols}; min-width:${60+N*96}px">`;
+  html+=`<div class="dg-head"></div>`;
+  for(let c=0;c<N;c++){ const m=DATA.order[c]; const cur=info&&info.mgrIdx===c;
+    html+=`<div class="dg-head ${cur?'current':''}">${m.emoji||''} ${esc(m.display_name)}</div>`; }
+  for(let r=0;r<PER();r++){
+    html+=`<div class="dg-rl">${r+1}</div>`;
+    for(let c=0;c<N;c++){
+      const n0=r*N+(r%2===0?c:(N-1-c)); const overall=n0+1;
+      const pk=state.picks.find(p=>p.overall===overall);
+      const isCur=info&&info.overall===overall;
+      if(pk){ const pl=DATA.byId[pk.player_id]; const el=provider.isEligible(pk.player_id);
+        html+=`<div class="dg-cell"><div class="dg-name">${pl?esc(pl.name):'?'}${el?'<span class="dg-elig"></span>':''}</div><div class="dg-team">${pl?esc(pl.team)+' \u00b7 '+pl.position:''}</div></div>`;
+      } else { html+=`<div class="dg-cell ${isCur?'current-slot':''}">${isCur?'<div class="dg-team" style="color:var(--orange);font-weight:700">on the clock</div>':''}</div>`; }
+    }
+  }
+  html+='</div></div>'; return html;
+}
+function pickerRows(){
+  const info=currentPickInfo(); const taken=draftedIds();
+  let list=DATA.players.filter(p=>!taken.has(p.id));
+  if(ui.filter==='elig') list=list.filter(p=>p.underdog);
+  else if(['GK','DEF','MID','FWD'].includes(ui.filter)) list=list.filter(p=>p.position===ui.filter);
+  if(ui.search){ const q=normName(ui.search); const qt=ui.search.toLowerCase();
+    list=list.filter(p=>normName(p.name).includes(q)||p.team.toLowerCase().includes(qt)); }
+  list.sort((a,b)=> a.team===b.team ? (POS_ORDER[a.position]-POS_ORDER[b.position] || a.name.localeCompare(b.name)) : a.team.localeCompare(b.team));
+  const rows=list.slice(0,150).map(p=>{
+    const blocked=info&&!canDraft(info.mgrIdx,p.id);
+    return `<div class="pl-row ${p.underdog?'elig':''}">
+      <span class="pos-chip">${p.position}</span>
+      <span class="pl-name">${esc(p.name)} <span class="muted" style="font-weight:400">\u00b7 ${esc(p.team)}</span></span>
+      ${p.underdog?`<span class="pill elig">#${p.team_rank}</span>`:''}
+      <button class="pl-draft" ${blocked?'style="opacity:.4" title="blocked by requirement"':''} onclick="makePick(${p.id})">Draft</button>
+    </div>`;
+  }).join('');
+  return { rows, count:list.length };
+}
+function picker(){
+  if(isComplete()) return '';
+  const {rows,count}=pickerRows();
+  const chips=[['all','All'],['elig','Ranked 40th+'],['GK','GK'],['DEF','DEF'],['MID','MID'],['FWD','FWD']];
+  return `<div class="picker"><h2 class="page-title" id="pickCount" style="font-size:1rem">Available players (${count})</h2>
+    <div class="picker-controls"><input type="text" id="pickSearch" placeholder="Search player or team\u2026" value="${esc(ui.search)}" oninput="ui.search=this.value; rerenderPicker()"></div>
+    <div class="picker-controls">${chips.map(c=>`<button class="filter-chip ${c[0]==='elig'?'elig':''} ${ui.filter===c[0]?'active':''}" onclick="ui.filter='${c[0]}'; render()">${c[1]}</button>`).join('')}</div>
+    <div class="player-list" id="plist">${rows}</div></div>`;
+}
+function rerenderPicker(){ const plist=document.getElementById('plist'); if(!plist) return;
+  const {rows,count}=pickerRows(); plist.innerHTML=rows;
+  const c=document.getElementById('pickCount'); if(c) c.textContent='Available players ('+count+')'; }
+
+/* ===== VIEW: SQUADS ===== */
+function viewSquads(){
+  if(!NUM()) return emptyState('ti-users','No managers loaded.');
+  const i=Math.min(ui.squadMgr,NUM()-1);
+  const tabs=DATA.order.map((m,idx)=>`<button class="squad-tab ${idx===i?'active':''}" onclick="ui.squadMgr=${idx};render()">${m.emoji||''} ${esc(m.display_name)}</button>`).join('');
+  const sq=squadOfIdx(i).slice().sort((a,b)=>{ const pa=DATA.byId[a.player_id],pb=DATA.byId[b.player_id];
+    return (POS_ORDER[pa.position]-POS_ORDER[pb.position])||a.overall-b.overall; });
+  const gk=gkCount(i), ud=udCount(i);
+  const rows=sq.map(pk=>{ const pl=DATA.byId[pk.player_id]; const el=provider.isEligible(pk.player_id);
+    return `<div class="pl-row ${el?'elig':''}"><span class="pos-chip">${pl.position}</span>
+      <span class="pl-name">${esc(pl.name)} <span class="muted" style="font-weight:400">\u00b7 ${esc(pl.team)}</span></span>
+      ${el?`<span class="pill elig">#${pl.team_rank}</span>`:''}
+      <span class="muted" style="font-size:.7rem">#${pk.overall}</span></div>`; }).join('') || emptyState('ti-clipboard','No picks yet for this manager.');
+  const gkOk=gk>=DATA.cfg.require_gk, udOk=ud>=DATA.cfg.require_underdog;
+  return `<h2 class="page-title">Squads</h2>
+    <div class="squad-tabs">${tabs}</div>
+    <div class="card" style="margin-bottom:.8rem">
+      <div style="font-weight:800;font-size:1.05rem">${mgrLabel(DATA.order[i])}</div>
+      <div class="squad-total">${sq.length} of ${PER()} picks \u00b7
+        <span style="color:${gkOk?'var(--green)':'var(--orange)'}">${gk}/${DATA.cfg.require_gk} GK</span> \u00b7
+        <span style="color:${udOk?'var(--green)':'var(--orange)'}">${ud}/${DATA.cfg.require_underdog} underdog</span></div>
+    </div>
+    <div class="player-list" style="max-height:none">${rows}</div>`;
+}
+
+/* ===== VIEW: PICKS LOG ===== */
+function viewPicksLog(){
+  if(!state.picks.length) return emptyState('ti-list-numbers','No picks yet.','Picks appear here in draft order as they happen.');
+  const body=state.picks.slice().sort((a,b)=>a.overall-b.overall).map(pk=>{
+    const pl=DATA.byId[pk.player_id]; const m=DATA.order[pk.mgrIdx];
+    return `<tr><td style="font-weight:700">#${pk.overall}</td><td class="muted">R${pk.round}</td>
+      <td>${m?m.emoji+' '+esc(m.display_name):pk.manager_slot}</td>
+      <td><b>${pl?esc(pl.name):'?'}</b><div class="muted" style="font-size:.72rem">${pl?esc(pl.team):''}</div></td>
+      <td><span class="pos-chip">${pl?pl.position:''}</span></td></tr>`; }).join('');
+  return `<h2 class="page-title">Picks (${state.picks.length})</h2>
+    <div class="card scroll-x"><table class="tbl"><thead><tr><th>#</th><th>Rd</th><th>Manager</th><th>Player</th><th>Pos</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+/* ===== VIEW: STANDINGS (pre-tournament) ===== */
+function viewStandings(){
+  const rows=DATA.order.map((m,i)=>{ const gk=gkCount(i),ud=udCount(i),n=squadOfIdx(i).length;
+    return `<div class="stand-row"><div class="stand-top">
+      <div class="stand-name">${m.emoji||''} ${esc(m.display_name)}</div>
+      <div class="muted" style="font-size:.78rem">${n}/${PER()} picks \u00b7 ${gk}/${DATA.cfg.require_gk} GK \u00b7 ${ud}/${DATA.cfg.require_underdog} UD</div>
+    </div></div>`; }).join('');
+  return `<h2 class="page-title">Standings</h2>
+    <div class="banner"><i class="ti ti-info-circle"></i><div>Scoring begins when the tournament kicks off on June 11. Until then, this shows each manager's draft progress; live points and the category bars switch on once matches start.</div></div>
+    <div class="card">${rows}</div>`;
+}
+
+/* ===== VIEW: SCORING ===== */
+function viewScoring(){
+  const s=SCORING;
+  const row=(label,val,neg)=>`<div class="rubric-row"><div class="rubric-label">${label}</div><div class="rubric-val ${neg?'neg':'pos'}">${val>0?'+':''}${val}</div></div>`;
+  return `<h2 class="page-title">Scoring</h2>
+  <div class="banner"><i class="ti ti-info-circle"></i><div>The rubric the league scores on once matches begin. Goals are weighted by position.</div></div>
+  <div class="card">
+    <div class="section-h" style="margin-top:0">Goals</div>
+    <div class="rubric-grid">${row('Goal \u2014 goalkeeper',s.goal.GK)}${row('Goal \u2014 defender',s.goal.DEF)}${row('Goal \u2014 midfielder',s.goal.MID)}${row('Goal \u2014 forward',s.goal.FWD)}</div>
+    <div class="section-h">Creation &amp; minutes</div>
+    <div class="rubric-grid">${row('Assist',s.assist)}${row('Played 60+ minutes',s.played60)}${row('Played 1\u201359 minutes',s.appearance)}</div>
+    <div class="section-h">Clean sheets (60+ min, team concedes 0)</div>
+    <div class="rubric-grid">${row('Goalkeeper / defender',s.cleanSheet.GK)}${row('Midfielder',s.cleanSheet.MID)}</div>
+    <div class="section-h">Goalkeeping</div>
+    <div class="rubric-grid">${row('Penalty saved (in-play)',s.penSave)}</div>
+    <div class="section-h">Deductions</div>
+    <div class="rubric-grid">${row('Yellow card',s.yellow,true)}${row('Red card',s.red,true)}${row('Own goal',s.ownGoal,true)}${row('Penalty missed',s.penMiss,true)}</div>
+  </div>
+  <div class="card" style="margin-top:1rem">
+    <div class="section-h" style="margin-top:0">Roster requirements</div>
+    <div class="muted" style="font-size:.86rem">Each manager drafts ${PER()} players and must include at least <b style="color:var(--text)">${DATA.cfg.require_gk} goalkeeper</b> and at least <b style="color:var(--text)">${DATA.cfg.require_underdog} players from teams ranked 40th or lower</b>. Goalkeeper saves are not scored. Points stop accruing once a player's nation is knocked out.</div>
+  </div>
+  <div class="card" style="margin-top:1rem">
+    <div class="section-h" style="margin-top:0">Underdog list (ranked 40th or lower)</div>
+    <div class="muted" style="font-size:.84rem; margin-bottom:.7rem">Locked from the <a href="${RANKING_SNAPSHOT.source}" target="_blank" rel="noopener" style="color:var(--blue)">FIFA Men's World Ranking</a>, as of <b style="color:var(--text)">${RANKING_SNAPSHOT.date}</b>. These ${RANKING_SNAPSHOT.eligible.length} nations count toward the requirement.</div>
+    <div style="display:flex; flex-wrap:wrap; gap:.35rem">${RANKING_SNAPSHOT.eligible.map(t=>`<span class="pill elig">${t[0]} \u00b7 ${t[1]}</span>`).join('')}</div>
+  </div>`;
+}
+
+/* ===== VIEW: AVAILABLE ===== */
+function viewUndrafted(){
+  const taken=draftedIds();
+  let list=DATA.players.filter(p=>!taken.has(p.id));
+  if(ui.search){ const q=normName(ui.search); const qt=ui.search.toLowerCase();
+    list=list.filter(p=>normName(p.name).includes(q)||p.team.toLowerCase().includes(qt)); }
+  list.sort((a,b)=> a.team===b.team ? (POS_ORDER[a.position]-POS_ORDER[b.position]) : a.team.localeCompare(b.team));
+  const shown=list.slice(0,250);
+  const body=shown.map(p=>`<tr><td><b>${esc(p.name)}</b><div class="muted" style="font-size:.72rem">${esc(p.team)}</div></td>
+    <td><span class="pos-chip">${p.position}</span></td><td>${p.underdog?`<span class="pill elig">#${p.team_rank}</span>`:''}</td></tr>`).join('');
+  return `<h2 class="page-title">Available (${list.length})</h2>
+    <div class="picker-controls"><input type="text" placeholder="Search player or team\u2026" value="${esc(ui.search)}" oninput="ui.search=this.value; render()"></div>
+    <div class="card scroll-x"><table class="tbl"><thead><tr><th>Player</th><th>Pos</th><th>Underdog</th></tr></thead><tbody>${body}</tbody></table></div>
+    ${list.length>shown.length?`<p class="muted" style="font-size:.78rem;margin-top:.6rem">Showing ${shown.length} of ${list.length}. Use search to narrow.</p>`:''}`;
+}
+
+/* ===== VIEW: COMMISSIONER ===== */
+function viewCommish(){
+  return `<h2 class="page-title">Commissioner</h2>
+    <div class="card">
+      <div class="section-h" style="margin-top:0">Draft edits</div>
+      <p class="muted" style="font-size:.85rem;margin-bottom:.8rem">Undo and edit are protected by the commissioner passcode. You'll be asked for it once per session.</p>
+      <div class="toolbar">
+        <button class="btn btn-ghost" onclick="undoLast()">Undo last pick</button>
+        <button class="btn btn-ghost" onclick="editPickPrompt()">Edit a pick\u2026</button>
+        <button class="btn btn-ghost" onclick="clearCommishPass();alert('Passcode cleared for this session.')">Forget passcode</button>
+      </div>
+    </div>
+    <div class="banner" style="margin-top:1rem"><i class="ti ti-bulb"></i><div>Everyone drafts from the same live board, so picks appear on every device the moment they're made. Standings and per-player scoring switch on automatically once the tournament starts.</div></div>`;
+}
+
+/* ===== VIEW: MORE (mobile) ===== */
+function viewMore(){
+  const items=[['standings','Standings','ti-trophy'],['undrafted','Available players','ti-user-search'],['tools','Commissioner','ti-settings']];
+  return `<h2 class="page-title">More</h2><div class="card" style="padding:.4rem">
+    ${items.map(it=>`<button class="btn btn-ghost" style="width:100%;text-align:left;margin:.25rem 0;display:flex;align-items:center;gap:.6rem" onclick="go('${it[0]}')"><i class="ti ${it[2]}" style="font-size:1.2rem"></i>${it[1]}</button>`).join('')}
+  </div>`;
+}
+
+/* ===== BOOT ===== */
+async function boot(){ ui.loading=true; ui.error=''; render();
+  try{
+    await provider.loadStatic();
+    await provider.loadPicks();
+    provider.subscribe(async ()=>{ try{ await provider.loadPicks(); }catch(e){} render(); });
+    ui.loading=false; ui.page='draft'; render();
+  }catch(e){ ui.loading=false; ui.error=(e&&e.message)?('Could not load the draft: '+e.message):'Could not connect to the database.'; render(); }
+}
+function checkPw(){ const v=document.getElementById('pwInput').value.trim();
+  if(v===PASSWORD){ document.getElementById('pwScreen').classList.add('hidden'); document.getElementById('app').classList.remove('hidden'); boot(); }
+  else { document.getElementById('pwErr').textContent='Incorrect password'; } }
+document.getElementById('pwInput').addEventListener('keydown',e=>{ if(e.key==='Enter') checkPw(); });
+</script>
+</body>
+</html>
