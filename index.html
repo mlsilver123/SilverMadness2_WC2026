@@ -221,9 +221,9 @@ const RANKING_SNAPSHOT={ date:'6 June 2026', source:'https://inside.fifa.com/fif
     ['Cabo Verde',68],['Ghana',73],['Haiti',82],['Curaçao',83],['New Zealand',85]] };
 
 /* ===== loaded data ===== */
-let DATA={ players:[], byId:{}, order:[], cfg:{picks_per:11, require_gk:1, require_underdog:2} };
+let DATA={ players:[], byId:{}, order:[], cfg:{picks_per:11, require_gk:1, require_underdog:2}, stats:{}, teamStatus:{} };
 let state={ picks:[] };
-let ui={ page:'draft', squadMgr:0, filter:'all', search:'', loading:true, error:'' };
+let ui={ page:'draft', squadMgr:0, expanded:{}, filter:'all', search:'', loading:true, error:'' };
 
 /* ===== helpers ===== */
 function normName(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim(); }
@@ -256,10 +256,56 @@ const provider={
     .on('postgres_changes',{event:'*',schema:'public',table:'picks'},cb)
     .on('postgres_changes',{event:'*',schema:'public',table:'managers'},cb)
     .on('postgres_changes',{event:'*',schema:'public',table:'draft_state'},cb)
+    .on('postgres_changes',{event:'*',schema:'public',table:'player_match_stats'},cb)
+    .on('postgres_changes',{event:'*',schema:'public',table:'team_status'},cb)
     .subscribe(); },
+  async loadScores(){
+    const [ms,ts]=await Promise.all([ sb.from('player_match_stats').select('*'), sb.from('team_status').select('*') ]);
+    DATA.stats={}; if(!ms.error&&ms.data){ ms.data.forEach(r=>{ (DATA.stats[r.player_id]=DATA.stats[r.player_id]||[]).push(r); }); }
+    DATA.teamStatus={}; if(!ts.error&&ts.data){ ts.data.forEach(t=>{ DATA.teamStatus[t.team]={alive:t.alive,stage:t.stage}; }); }
+  },
   getPlayer(id){ return DATA.byId[id]; },
   isEligible(id){ const p=DATA.byId[id]; return !!(p&&p.underdog); }
 };
+
+/* ===== scoring engine (reads player_match_stats + team_status) ===== */
+const ROUND_ORDER=['group','r32','r16','qf','sf','final'];
+const ROUND_LABEL={group:'Group',r32:'R32',r16:'R16',qf:'QF',sf:'Semi',final:'Final'};
+function statsFor(id){ return DATA.stats[id]||[]; }
+function hasScoring(){ for(const k in DATA.stats){ return true; } return false; }
+function teamAlive(team){ const t=DATA.teamStatus[team]; return t? !!t.alive : true; }
+function matchPoints(pos,row){ const parts=[]; let pts=0;
+  const add=(label,v)=>{ if(v){ parts.push({label,v}); pts+=v; } };
+  if(row.goals) add('Goal'+(row.goals>1?' \u00d7'+row.goals:''), row.goals*SCORING.goal[pos]);
+  if(row.assists) add('Assist'+(row.assists>1?' \u00d7'+row.assists:''), row.assists*SCORING.assist);
+  if(row.minutes>=60) add('60+ min', SCORING.played60); else if(row.minutes>=1) add('Sub', SCORING.appearance);
+  if(row.clean_sheet && SCORING.cleanSheet[pos]) add('Clean sheet', SCORING.cleanSheet[pos]);
+  if(row.pen_saved) add('Pen save'+(row.pen_saved>1?' \u00d7'+row.pen_saved:''), row.pen_saved*SCORING.penSave);
+  if(row.yellow) add('Yellow'+(row.yellow>1?' \u00d7'+row.yellow:''), row.yellow*SCORING.yellow);
+  if(row.red) add('Red', row.red*SCORING.red);
+  if(row.own_goals) add('Own goal'+(row.own_goals>1?' \u00d7'+row.own_goals:''), row.own_goals*SCORING.ownGoal);
+  if(row.pen_missed) add('Pen miss'+(row.pen_missed>1?' \u00d7'+row.pen_missed:''), row.pen_missed*SCORING.penMiss);
+  return {pts,parts};
+}
+function playerTotal(id){ const p=DATA.byId[id]; if(!p) return 0; let t=0; statsFor(id).forEach(r=>{ t+=matchPoints(p.position,r).pts; }); return t; }
+function playerCats(id){ const p=DATA.byId[id]; const c={goals:0,assists:0,minutes:0,clean:0,deductions:0}; if(!p) return c;
+  statsFor(id).forEach(r=>{ const pos=p.position;
+    c.goals+=r.goals*SCORING.goal[pos];
+    c.assists+=r.assists*SCORING.assist;
+    c.minutes+= r.minutes>=60?SCORING.played60:(r.minutes>=1?SCORING.appearance:0);
+    c.clean+= (r.clean_sheet?SCORING.cleanSheet[pos]:0) + r.pen_saved*SCORING.penSave;
+    c.deductions+= r.yellow*SCORING.yellow + r.red*SCORING.red + r.own_goals*SCORING.ownGoal + r.pen_missed*SCORING.penMiss;
+  }); return c;
+}
+function mgrAlive(i){ return squadOfIdx(i).filter(pk=>{ const pl=DATA.byId[pk.player_id]; return pl&&teamAlive(pl.team); }).length; }
+function mgrTotal(i){ let t=0; squadOfIdx(i).forEach(pk=>t+=playerTotal(pk.player_id)); return t; }
+function standingsData(){
+  return DATA.order.map((m,i)=>{ const cat={goals:0,assists:0,minutes:0,clean:0,deductions:0}; let total=0;
+    squadOfIdx(i).forEach(pk=>{ total+=playerTotal(pk.player_id); const c=playerCats(pk.player_id);
+      cat.goals+=c.goals; cat.assists+=c.assists; cat.minutes+=c.minutes; cat.clean+=c.clean; cat.deductions+=c.deductions; });
+    return { i, m, total, cat, alive:mgrAlive(i), count:squadOfIdx(i).length };
+  }).sort((a,b)=> b.total-a.total || b.alive-a.alive );
+}
 
 /* ===== draft math (snake) ===== */
 function NUM(){ return DATA.order.length; }
@@ -427,26 +473,47 @@ function rerenderPicker(){ const plist=document.getElementById('plist'); if(!pli
 function viewSquads(){
   if(!NUM()) return emptyState('ti-users','No managers loaded.');
   const i=Math.min(ui.squadMgr,NUM()-1);
-  const tabs=DATA.order.map((m,idx)=>`<button class="squad-tab ${idx===i?'active':''}" onclick="ui.squadMgr=${idx};render()">${m.emoji||''} ${esc(m.display_name)}</button>`).join('');
-  const sq=squadOfIdx(i).slice().sort((a,b)=>{ const pa=DATA.byId[a.player_id],pb=DATA.byId[b.player_id];
-    return (POS_ORDER[pa.position]-POS_ORDER[pb.position])||a.overall-b.overall; });
-  const gk=gkCount(i), ud=udCount(i);
-  const rows=sq.map(pk=>{ const pl=DATA.byId[pk.player_id]; const el=provider.isEligible(pk.player_id);
-    return `<div class="pl-row ${el?'elig':''}"><span class="pos-chip">${pl.position}</span>
-      <span class="pl-name">${esc(pl.name)} <span class="muted" style="font-weight:400">\u00b7 ${esc(pl.team)}</span></span>
-      ${el?`<span class="pill elig">#${pl.team_rank}</span>`:''}
-      <span class="muted" style="font-size:.7rem">#${pk.overall}</span></div>`; }).join('') || emptyState('ti-clipboard','No picks yet for this manager.');
-  const gkOk=gk>=DATA.cfg.require_gk, udOk=ud>=DATA.cfg.require_underdog;
+  const tabs=DATA.order.map((m,idx)=>`<button class="squad-tab ${idx===i?'active':''}" onclick="ui.squadMgr=${idx};ui.expanded={};render()">${m.emoji||''} ${esc(m.display_name)}</button>`).join('');
+  const scored=hasScoring();
+  const sq=squadOfIdx(i).slice().sort((a,b)=> scored
+    ? (playerTotal(b.player_id)-playerTotal(a.player_id))
+    : ((POS_ORDER[DATA.byId[a.player_id].position]-POS_ORDER[DATA.byId[b.player_id].position])||a.overall-b.overall));
+  const gk=gkCount(i), ud=udCount(i), gkOk=gk>=DATA.cfg.require_gk, udOk=ud>=DATA.cfg.require_underdog;
+  const body=sq.length ? sq.map(pk=> scored?playerCard(pk):playerRow(pk)).join('') : emptyState('ti-clipboard','No picks yet for this manager.');
   return `<h2 class="page-title">Squads</h2>
     <div class="squad-tabs">${tabs}</div>
-    <div class="card" style="margin-bottom:.8rem">
-      <div style="font-weight:800;font-size:1.05rem">${mgrLabel(DATA.order[i])}</div>
-      <div class="squad-total">${sq.length} of ${PER()} picks \u00b7
-        <span style="color:${gkOk?'var(--green)':'var(--orange)'}">${gk}/${DATA.cfg.require_gk} GK</span> \u00b7
-        <span style="color:${udOk?'var(--green)':'var(--orange)'}">${ud}/${DATA.cfg.require_underdog} underdog</span></div>
+    <div class="squad-head">
+      <div><div style="font-weight:800;font-size:1.05rem">${mgrLabel(DATA.order[i])}</div>
+      <div class="squad-total">${sq.length} of ${PER()} \u00b7 <span style="color:${gkOk?'var(--green)':'var(--orange)'}">${gk}/${DATA.cfg.require_gk} GK</span> \u00b7 <span style="color:${udOk?'var(--green)':'var(--orange)'}">${ud}/${DATA.cfg.require_underdog} underdog</span>${scored?` \u00b7 <b style="color:var(--text)">${mgrTotal(i)} pts</b>`:''}</div></div>
+      ${scored&&sq.length?`<button class="expand-toggle" onclick="toggleAll(${i})">${allOpen(i)?'Collapse all':'Expand all'}</button>`:''}
     </div>
-    <div class="player-list" style="max-height:none">${rows}</div>`;
+    <div ${scored?'':'class="player-list" style="max-height:none"'}>${body}</div>`;
 }
+function playerRow(pk){ const pl=DATA.byId[pk.player_id]; const el=provider.isEligible(pk.player_id);
+  return `<div class="pl-row ${el?'elig':''}"><span class="pos-chip">${pl.position}</span>
+    <span class="pl-name">${esc(pl.name)} <span class="muted" style="font-weight:400">\u00b7 ${esc(pl.team)}</span></span>
+    ${el?`<span class="pill elig">#${pl.team_rank}</span>`:''}
+    <span class="muted" style="font-size:.7rem">#${pk.overall}</span></div>`; }
+function allOpen(i){ const sq=squadOfIdx(i); return sq.length>0 && sq.every(pk=>ui.expanded[pk.player_id]); }
+function toggleAll(i){ const open=allOpen(i); squadOfIdx(i).forEach(pk=>ui.expanded[pk.player_id]=!open); render(); }
+function togglePlayer(id){ ui.expanded[id]=!ui.expanded[id]; render(); }
+function playerCard(pk){ const pl=DATA.byId[pk.player_id]; const el=provider.isEligible(pk.player_id);
+  const tot=playerTotal(pk.player_id); const open=!!ui.expanded[pk.player_id]; const alive=teamAlive(pl.team);
+  const rows=statsFor(pk.player_id).slice().sort((a,b)=>ROUND_ORDER.indexOf(a.round)-ROUND_ORDER.indexOf(b.round));
+  const ledger=rows.map(r=>{ const mp=matchPoints(pl.position,r); const knock=r.round!=='group';
+    const chips=mp.parts.map(pt=>{ const cls= pt.v<0?'neg':(/Goal/.test(pt.label)?'goal':/Assist/.test(pt.label)?'assist':(/Clean|Pen save/.test(pt.label)?'cs':''));
+      return `<span class="chip ${cls}">${pt.label} ${pt.v>0?'+':''}${pt.v}</span>`; }).join('');
+    return `<div class="ledger-row"><span class="ledger-rnd ${knock?'knock':''}">${ROUND_LABEL[r.round]||r.round}</span><span class="chips">${chips||'<span class="chip">No points</span>'}</span><span class="ledger-pts">${mp.pts>0?'+':''}${mp.pts}</span></div>`; }).join('')
+    || '<div class="muted" style="font-size:.78rem;padding:.4rem .2rem">No match data yet.</div>';
+  return `<div class="pcard ${open?'open':''} ${alive?'':'out'}">
+    <div class="pcard-head" onclick="togglePlayer(${pk.player_id})">
+      <span class="pos-chip">${pl.position}</span>
+      <span class="pcard-name"><span class="${alive?'':'strike'}">${esc(pl.name)}</span> <span class="muted" style="font-weight:400;font-size:.78rem">\u00b7 ${esc(pl.team)}</span>${el?' <span class="pill elig">UD</span>':''}</span>
+      <span class="pcard-total ${tot<=0?'dim':''}">${tot}</span>
+      <i class="ti ti-chevron-down chev"></i>
+    </div>
+    <div class="pcard-body">${ledger}</div>
+  </div>`; }
 
 /* ===== VIEW: PICKS LOG ===== */
 function viewPicksLog(){
@@ -463,14 +530,40 @@ function viewPicksLog(){
 
 /* ===== VIEW: STANDINGS (pre-tournament) ===== */
 function viewStandings(){
-  const rows=DATA.order.map((m,i)=>{ const gk=gkCount(i),ud=udCount(i),n=squadOfIdx(i).length;
-    return `<div class="stand-row"><div class="stand-top">
-      <div class="stand-name">${m.emoji||''} ${esc(m.display_name)}</div>
-      <div class="muted" style="font-size:.78rem">${n}/${PER()} picks \u00b7 ${gk}/${DATA.cfg.require_gk} GK \u00b7 ${ud}/${DATA.cfg.require_underdog} UD</div>
-    </div></div>`; }).join('');
+  if(!NUM()) return emptyState('ti-trophy','No managers loaded.');
+  if(!hasScoring()){
+    const rows=DATA.order.map((m,i)=>{ const gk=gkCount(i),ud=udCount(i),n=squadOfIdx(i).length;
+      return `<div class="stand-row"><div class="stand-top">
+        <div class="stand-name">${m.emoji||''} ${esc(m.display_name)}</div>
+        <div class="muted" style="font-size:.78rem">${n}/${PER()} picks \u00b7 ${gk}/${DATA.cfg.require_gk} GK \u00b7 ${ud}/${DATA.cfg.require_underdog} UD</div>
+      </div></div>`; }).join('');
+    return `<h2 class="page-title">Standings</h2>
+      <div class="banner"><i class="ti ti-info-circle"></i><div>Scoring begins when the tournament kicks off on June 11. Until then, this shows each manager's draft progress; live points and the category bars switch on once matches start.</div></div>
+      <div class="card">${rows}</div>`;
+  }
+  const data=standingsData(); const leader=Math.max(1,...data.map(d=>d.cat.goals+d.cat.assists+d.cat.minutes+Math.max(0,d.cat.clean)));
+  const seg=(v,color)=> v>0?`<span style="width:${(v/leader*100).toFixed(1)}%;background:${color}"></span>`:'';
+  const rows=data.map((d,rank)=>`<div class="stand-row">
+      <div class="stand-top">
+        <div class="stand-rank">${rank+1}</div>
+        <div class="stand-name">${d.m.emoji||''} ${esc(d.m.display_name)}</div>
+        <div class="stand-remain ${d.alive?'':'none'}"><span class="dot"></span>${d.alive} in</div>
+        <div class="stand-pts">${d.total}${d.cat.deductions<0?` <span class="stand-ded">${d.cat.deductions}</span>`:''}</div>
+      </div>
+      <div class="stand-stack"><div class="stand-fillwrap">
+        ${seg(d.cat.goals,'var(--orange)')}${seg(d.cat.assists,'var(--blue)')}${seg(d.cat.minutes,'#64748b')}${seg(d.cat.clean,'var(--green)')}
+      </div></div>
+    </div>`).join('');
   return `<h2 class="page-title">Standings</h2>
-    <div class="banner"><i class="ti ti-info-circle"></i><div>Scoring begins when the tournament kicks off on June 11. Until then, this shows each manager's draft progress; live points and the category bars switch on once matches start.</div></div>
-    <div class="card">${rows}</div>`;
+    <div class="card">${rows}
+      <div class="stand-key">
+        <span class="lg-item"><span class="lg-dot" style="background:var(--orange)"></span>Goals</span>
+        <span class="lg-item"><span class="lg-dot" style="background:var(--blue)"></span>Assists</span>
+        <span class="lg-item"><span class="lg-dot" style="background:#64748b"></span>Minutes</span>
+        <span class="lg-item"><span class="lg-dot" style="background:var(--green)"></span>Clean sheets</span>
+      </div>
+      <div class="stand-source">"In" counts players whose nation is still in the tournament. Bar length is each manager's total against the leader; segments show where the points came from. Cards, own goals and missed penalties subtract, shown in red. Live data: 2026 FIFA World Cup via API-Football.</div>
+    </div>`;
 }
 
 /* ===== VIEW: SCORING ===== */
@@ -493,7 +586,7 @@ function viewScoring(){
   </div>
   <div class="card" style="margin-top:1rem">
     <div class="section-h" style="margin-top:0">Roster requirements</div>
-    <div class="muted" style="font-size:.86rem">Each manager drafts ${PER()} players and must include at least <b style="color:var(--text)">${DATA.cfg.require_gk} goalkeeper</b> and at least <b style="color:var(--text)">${DATA.cfg.require_underdog} players from teams ranked 40th or lower</b>. Goalkeeper saves are not scored. Points stop accruing once a player's nation is knocked out.</div>
+    <div class="muted" style="font-size:.86rem">Each manager drafts ${PER()} players and must include at least <b style="color:var(--text)">${DATA.cfg.require_gk} goalkeeper</b> and at least <b style="color:var(--text)">${DATA.cfg.require_underdog} players from teams ranked 40th or lower</b>. Points stop accruing once a player's nation is knocked out.</div>
   </div>
   <div class="card" style="margin-top:1rem">
     <div class="section-h" style="margin-top:0">Underdog list (ranked 40th or lower)</div>
@@ -546,7 +639,8 @@ async function boot(){ ui.loading=true; ui.error=''; render();
   try{
     await provider.loadStatic();
     await provider.loadPicks();
-    provider.subscribe(async ()=>{ try{ await provider.loadPicks(); }catch(e){} render(); });
+    try{ await provider.loadScores(); }catch(e){}
+    provider.subscribe(async ()=>{ try{ await provider.loadPicks(); await provider.loadScores(); }catch(e){} render(); });
     ui.loading=false; ui.page='draft'; render();
   }catch(e){ ui.loading=false; ui.error=(e&&e.message)?('Could not load the draft: '+e.message):'Could not connect to the database.'; render(); }
 }
