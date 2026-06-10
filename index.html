@@ -99,6 +99,9 @@ h2.page-title{font-size:1.2rem; font-weight:800; margin-bottom:.85rem;}
 .picker-controls{display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:.7rem;}
 .picker input[type=text]{flex:1; min-width:160px; padding:.6rem .8rem; background:var(--card2); border:1px solid var(--border); border-radius:.55rem; color:var(--text); font-size:16px; outline:none;}
 .picker input[type=text]:focus{border-color:var(--orange);}
+.picker-controls input[type=text]{flex:1; min-width:150px; padding:.6rem .8rem; background:var(--card2); border:1px solid var(--border); border-radius:.55rem; color:var(--text); font-size:16px; outline:none;}
+.team-select{padding:.6rem .7rem; background:var(--card2); border:1px solid var(--border); border-radius:.55rem; color:var(--text); font-size:14px; outline:none; max-width:50%;}
+.team-select:focus{border-color:var(--orange);}
 .filter-chip{padding:.4rem .75rem; border-radius:.5rem; border:1px solid var(--border); background:transparent; color:var(--muted); font-size:.76rem; font-weight:700;}
 .filter-chip.active{background:var(--orange); color:#fff; border-color:var(--orange);}
 .filter-chip.elig.active{background:var(--green); border-color:var(--green);}
@@ -223,7 +226,7 @@ const RANKING_SNAPSHOT={ date:'6 June 2026', source:'https://inside.fifa.com/fif
 /* ===== loaded data ===== */
 let DATA={ players:[], byId:{}, order:[], cfg:{picks_per:11, require_gk:1, require_underdog:2}, stats:{}, teamStatus:{} };
 let state={ picks:[] };
-let ui={ page:'draft', squadMgr:0, expanded:{}, filter:'all', search:'', loading:true, error:'' };
+let ui={ page:'draft', squadMgr:0, expanded:{}, filter:'all', team:'all', search:'', loading:true, error:'' };
 
 /* ===== helpers ===== */
 function normName(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim(); }
@@ -442,10 +445,11 @@ function pickerRows(){
   let list=DATA.players.filter(p=>!taken.has(p.id));
   if(ui.filter==='elig') list=list.filter(p=>p.underdog);
   else if(['GK','DEF','MID','FWD'].includes(ui.filter)) list=list.filter(p=>p.position===ui.filter);
+  if(ui.team && ui.team!=='all') list=list.filter(p=>p.team===ui.team);
   if(ui.search){ const q=normName(ui.search); const qt=ui.search.toLowerCase();
     list=list.filter(p=>normName(p.name).includes(q)||p.team.toLowerCase().includes(qt)); }
   list.sort((a,b)=> a.team===b.team ? (POS_ORDER[a.position]-POS_ORDER[b.position] || a.name.localeCompare(b.name)) : a.team.localeCompare(b.team));
-  const rows=list.slice(0,150).map(p=>{
+  const rows=list.map(p=>{
     const blocked=info&&!canDraft(info.mgrIdx,p.id);
     return `<div class="pl-row ${p.underdog?'elig':''}">
       <span class="pos-chip">${p.position}</span>
@@ -456,12 +460,17 @@ function pickerRows(){
   }).join('');
   return { rows, count:list.length };
 }
+function teamOptions(sel){ const teams=[...new Set(DATA.players.map(p=>p.team))].sort();
+  return '<option value="all">All teams</option>'+teams.map(t=>`<option value="${esc(t)}" ${t===sel?'selected':''}>${esc(t)}</option>`).join(''); }
 function picker(){
   if(isComplete()) return '';
   const {rows,count}=pickerRows();
   const chips=[['all','All'],['elig','Ranked 40th+'],['GK','GK'],['DEF','DEF'],['MID','MID'],['FWD','FWD']];
   return `<div class="picker"><h2 class="page-title" id="pickCount" style="font-size:1rem">Available players (${count})</h2>
-    <div class="picker-controls"><input type="text" id="pickSearch" placeholder="Search player or team\u2026" value="${esc(ui.search)}" oninput="ui.search=this.value; rerenderPicker()"></div>
+    <div class="picker-controls">
+      <input type="text" id="pickSearch" placeholder="Search player or team\u2026" value="${esc(ui.search)}" oninput="ui.search=this.value; rerenderPicker()">
+      <select class="team-select" onchange="ui.team=this.value; render()">${teamOptions(ui.team)}</select>
+    </div>
     <div class="picker-controls">${chips.map(c=>`<button class="filter-chip ${c[0]==='elig'?'elig':''} ${ui.filter===c[0]?'active':''}" onclick="ui.filter='${c[0]}'; render()">${c[1]}</button>`).join('')}</div>
     <div class="player-list" id="plist">${rows}</div></div>`;
 }
@@ -599,16 +608,18 @@ function viewScoring(){
 function viewUndrafted(){
   const taken=draftedIds();
   let list=DATA.players.filter(p=>!taken.has(p.id));
+  if(ui.team && ui.team!=='all') list=list.filter(p=>p.team===ui.team);
   if(ui.search){ const q=normName(ui.search); const qt=ui.search.toLowerCase();
     list=list.filter(p=>normName(p.name).includes(q)||p.team.toLowerCase().includes(qt)); }
   list.sort((a,b)=> a.team===b.team ? (POS_ORDER[a.position]-POS_ORDER[b.position]) : a.team.localeCompare(b.team));
-  const shown=list.slice(0,250);
-  const body=shown.map(p=>`<tr><td><b>${esc(p.name)}</b><div class="muted" style="font-size:.72rem">${esc(p.team)}</div></td>
+  const body=list.map(p=>`<tr><td><b>${esc(p.name)}</b><div class="muted" style="font-size:.72rem">${esc(p.team)}</div></td>
     <td><span class="pos-chip">${p.position}</span></td><td>${p.underdog?`<span class="pill elig">#${p.team_rank}</span>`:''}</td></tr>`).join('');
   return `<h2 class="page-title">Available (${list.length})</h2>
-    <div class="picker-controls"><input type="text" placeholder="Search player or team\u2026" value="${esc(ui.search)}" oninput="ui.search=this.value; render()"></div>
-    <div class="card scroll-x"><table class="tbl"><thead><tr><th>Player</th><th>Pos</th><th>Underdog</th></tr></thead><tbody>${body}</tbody></table></div>
-    ${list.length>shown.length?`<p class="muted" style="font-size:.78rem;margin-top:.6rem">Showing ${shown.length} of ${list.length}. Use search to narrow.</p>`:''}`;
+    <div class="picker-controls">
+      <input type="text" placeholder="Search player or team\u2026" value="${esc(ui.search)}" oninput="ui.search=this.value; render()">
+      <select class="team-select" onchange="ui.team=this.value; render()">${teamOptions(ui.team)}</select>
+    </div>
+    <div class="card scroll-x"><table class="tbl"><thead><tr><th>Player</th><th>Pos</th><th>Underdog</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 /* ===== VIEW: COMMISSIONER ===== */
