@@ -237,14 +237,27 @@ function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').repla
 
 /* ===== provider (Supabase) ===== */
 const provider={
+  async fetchAll(table, orderCol){
+    let all=[], from=0; const size=1000;
+    for(;;){
+      let q=sb.from(table).select('*').range(from, from+size-1);
+      if(orderCol) q=q.order(orderCol);
+      const {data,error}=await q;
+      if(error) throw error;
+      all=all.concat(data||[]);
+      if(!data || data.length<size) break;
+      from+=size;
+    }
+    return all;
+  },
   async loadStatic(){
-    const [pl,mg,ds]=await Promise.all([
-      sb.from('players').select('*'),
+    const [mg,ds]=await Promise.all([
       sb.from('managers').select('*').order('draft_position'),
       sb.from('draft_state').select('*').eq('id',1).single()
     ]);
-    if(pl.error) throw pl.error; if(mg.error) throw mg.error; if(ds.error) throw ds.error;
-    DATA.players=pl.data||[]; DATA.byId=Object.fromEntries(DATA.players.map(p=>[p.id,p]));
+    if(mg.error) throw mg.error; if(ds.error) throw ds.error;
+    const players=await this.fetchAll('players','id');
+    DATA.players=players; DATA.byId=Object.fromEntries(players.map(p=>[p.id,p]));
     DATA.order=mg.data||[];
     if(ds.data){ DATA.cfg={ picks_per:ds.data.picks_per||11,
       require_gk:(ds.data.require_gk==null?1:ds.data.require_gk),
@@ -263,8 +276,9 @@ const provider={
     .on('postgres_changes',{event:'*',schema:'public',table:'team_status'},cb)
     .subscribe(); },
   async loadScores(){
-    const [ms,ts]=await Promise.all([ sb.from('player_match_stats').select('*'), sb.from('team_status').select('*') ]);
-    DATA.stats={}; if(!ms.error&&ms.data){ ms.data.forEach(r=>{ (DATA.stats[r.player_id]=DATA.stats[r.player_id]||[]).push(r); }); }
+    let ms=[]; try{ ms=await this.fetchAll('player_match_stats'); }catch(e){ ms=[]; }
+    const ts=await sb.from('team_status').select('*');
+    DATA.stats={}; ms.forEach(r=>{ (DATA.stats[r.player_id]=DATA.stats[r.player_id]||[]).push(r); });
     DATA.teamStatus={}; if(!ts.error&&ts.data){ ts.data.forEach(t=>{ DATA.teamStatus[t.team]={alive:t.alive,stage:t.stage}; }); }
   },
   getPlayer(id){ return DATA.byId[id]; },
