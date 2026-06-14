@@ -316,6 +316,7 @@ function playerCats(id){ const p=DATA.byId[id]; const c={goals:0,assists:0,minut
 }
 function mgrAlive(i){ return squadOfIdx(i).filter(pk=>{ const pl=DATA.byId[pk.player_id]; return pl&&teamAlive(pl.team); }).length; }
 function mgrTotal(i){ let t=0; squadOfIdx(i).forEach(pk=>t+=playerTotal(pk.player_id)); return t; }
+function lastUpdated(){ let mx=0; for(const id in DATA.stats){ for(const r of DATA.stats[id]){ const t=Date.parse(r.updated_at); if(t>mx) mx=t; } } return mx? new Date(mx).toLocaleString():''; }
 function standingsData(){
   return DATA.order.map((m,i)=>{ const cat={goals:0,assists:0,minutes:0,clean:0,deductions:0}; let total=0;
     squadOfIdx(i).forEach(pk=>{ total+=playerTotal(pk.player_id); const c=playerCats(pk.player_id);
@@ -378,14 +379,14 @@ async function editPickPrompt(){ if(!state.picks.length){ alert('No picks to edi
 
 /* ===== nav + render ===== */
 const NAV=[{id:'draft',label:'Draft'},{id:'standings',label:'Standings'},{id:'squads',label:'Squads'},
-  {id:'players',label:'Picks'},{id:'scoring',label:'Scoring'},{id:'undrafted',label:'Available'},{id:'tools',label:'Commissioner'}];
-const BOTTOM=['draft','squads','players','scoring','more'];
+  {id:'players',label:'Players'},{id:'scoring',label:'Scoring'},{id:'undrafted',label:'Available'},{id:'tools',label:'Commissioner'}];
+const BOTTOM=['standings','squads','players','more'];
 function go(page){ ui.page=page; window.scrollTo(0,0); render(); }
 function renderNav(){
   document.getElementById('topNav').innerHTML=NAV.map(n=>`<button class="nav-btn ${ui.page===n.id?'active':''}" onclick="go('${n.id}')">${n.label}</button>`).join('');
-  const bmap={draft:'ti-clipboard-list',squads:'ti-users',players:'ti-list-numbers',scoring:'ti-calculator',more:'ti-dots'};
-  const blab={draft:'Draft',squads:'Squads',players:'Picks',scoring:'Scoring',more:'More'};
-  const activeMore=!['draft','squads','players','scoring'].includes(ui.page);
+  const bmap={standings:'ti-trophy',squads:'ti-users',players:'ti-list-numbers',more:'ti-dots'};
+  const blab={standings:'Standings',squads:'Squads',players:'Players',more:'More'};
+  const activeMore=!['standings','squads','players'].includes(ui.page);
   document.getElementById('bottomNav').innerHTML=BOTTOM.map(id=>{
     const act=id==='more'?activeMore:ui.page===id;
     return `<button class="bn-item ${act?'active':''}" onclick="go('${id}')"><i class="ti ${bmap[id]}"></i><span>${blab[id]}</span></button>`;
@@ -526,7 +527,7 @@ function playerCard(pk){ const pl=DATA.byId[pk.player_id]; const el=provider.isE
   const ledger=rows.map(r=>{ const mp=matchPoints(pl.position,r); const knock=r.round!=='group';
     const chips=mp.parts.map(pt=>{ const cls= pt.v<0?'neg':(/Goal/.test(pt.label)?'goal':/Assist/.test(pt.label)?'assist':(/Clean|Pen save/.test(pt.label)?'cs':''));
       return `<span class="chip ${cls}">${pt.label} ${pt.v>0?'+':''}${pt.v}</span>`; }).join('');
-    return `<div class="ledger-row"><span class="ledger-rnd ${knock?'knock':''}">${ROUND_LABEL[r.round]||r.round}</span><span class="chips">${chips||'<span class="chip">No points</span>'}</span><span class="ledger-pts">${mp.pts>0?'+':''}${mp.pts}</span></div>`; }).join('')
+    return `<div class="ledger-row"><span class="ledger-rnd ${knock?'knock':''}">${ROUND_LABEL[r.round]||r.round}${r.opponent?' v '+esc(r.opponent):''}</span><span class="chips">${chips||'<span class="chip">No points</span>'}</span><span class="ledger-pts">${mp.pts>0?'+':''}${mp.pts}</span></div>`; }).join('')
     || '<div class="muted" style="font-size:.78rem;padding:.4rem .2rem">No match data yet.</div>';
   return `<div class="pcard ${open?'open':''} ${alive?'':'out'}">
     <div class="pcard-head" onclick="togglePlayer(${pk.player_id})">
@@ -540,15 +541,20 @@ function playerCard(pk){ const pl=DATA.byId[pk.player_id]; const el=provider.isE
 
 /* ===== VIEW: PICKS LOG ===== */
 function viewPicksLog(){
-  if(!state.picks.length) return emptyState('ti-list-numbers','No picks yet.','Picks appear here in draft order as they happen.');
-  const body=state.picks.slice().sort((a,b)=>a.overall-b.overall).map(pk=>{
-    const pl=DATA.byId[pk.player_id]; const m=DATA.order[pk.mgrIdx];
-    return `<tr><td style="font-weight:700">#${pk.overall}</td><td class="muted">R${pk.round}</td>
-      <td>${m?m.emoji+' '+esc(m.display_name):pk.manager_slot}</td>
+  if(!state.picks.length) return emptyState('ti-list-numbers','No players yet.','Drafted players appear here once the draft has happened.');
+  const rows=state.picks.map(pk=>({
+    pk, pts:playerTotal(pk.player_id),
+    mp:statsFor(pk.player_id).filter(r=>r.minutes>=1).length
+  })).sort((a,b)=> b.pts-a.pts || b.mp-a.mp);
+  const body=rows.map((x,i)=>{ const pk=x.pk; const pl=DATA.byId[pk.player_id]; const m=DATA.order[pk.mgrIdx];
+    return `<tr><td style="font-weight:700">${i+1}</td>
       <td><b>${pl?esc(pl.name):'?'}</b><div class="muted" style="font-size:.72rem">${pl?esc(pl.team):''}</div></td>
-      <td><span class="pos-chip">${pl?pl.position:''}</span></td></tr>`; }).join('');
-  return `<h2 class="page-title">Picks (${state.picks.length})</h2>
-    <div class="card scroll-x"><table class="tbl"><thead><tr><th>#</th><th>Rd</th><th>Manager</th><th>Player</th><th>Pos</th></tr></thead><tbody>${body}</tbody></table></div>`;
+      <td><span class="pos-chip">${pl?pl.position:''}</span></td>
+      <td>${m?m.emoji+' '+esc(m.display_name):pk.manager_slot}</td>
+      <td class="muted" style="text-align:center">${x.mp}</td>
+      <td style="font-weight:800;text-align:right">${x.pts}</td></tr>`; }).join('');
+  return `<h2 class="page-title">Players (${state.picks.length})</h2>
+    <div class="card scroll-x"><table class="tbl"><thead><tr><th>#</th><th>Player</th><th>Pos</th><th>Manager</th><th>MP</th><th>Pts</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 /* ===== VIEW: STANDINGS (pre-tournament) ===== */
@@ -585,7 +591,7 @@ function viewStandings(){
         <span class="lg-item"><span class="lg-dot" style="background:#64748b"></span>Minutes</span>
         <span class="lg-item"><span class="lg-dot" style="background:var(--green)"></span>Clean sheets</span>
       </div>
-      <div class="stand-source">"In" counts players whose nation is still in the tournament. Bar length is each manager's total against the leader; segments show where the points came from. Cards, own goals and missed penalties subtract, shown in red. Live data: 2026 FIFA World Cup via API-Football.</div>
+      <div class="stand-source">"In" counts players whose nation is still in the tournament. Bar length is each manager's total against the leader; segments show where the points came from. Cards, own goals and missed penalties subtract, shown in red. Live data: 2026 FIFA World Cup via API-Football.${lastUpdated()?' Last updated '+lastUpdated()+'.':''}</div>
     </div>`;
 }
 
@@ -653,7 +659,7 @@ function viewCommish(){
 
 /* ===== VIEW: MORE (mobile) ===== */
 function viewMore(){
-  const items=[['standings','Standings','ti-trophy'],['undrafted','Available players','ti-user-search'],['tools','Commissioner','ti-settings']];
+  const items=[['draft','Draft','ti-clipboard-list'],['scoring','Scoring','ti-calculator'],['undrafted','Available players','ti-user-search'],['tools','Commissioner','ti-settings']];
   return `<h2 class="page-title">More</h2><div class="card" style="padding:.4rem">
     ${items.map(it=>`<button class="btn btn-ghost" style="width:100%;text-align:left;margin:.25rem 0;display:flex;align-items:center;gap:.6rem" onclick="go('${it[0]}')"><i class="ti ${it[2]}" style="font-size:1.2rem"></i>${it[1]}</button>`).join('')}
   </div>`;
