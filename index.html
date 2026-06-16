@@ -181,6 +181,16 @@ h2.page-title{font-size:1.2rem; font-weight:800; margin-bottom:.85rem;}
 .banner{background:rgba(59,130,246,.1); border:1px solid var(--blue); border-radius:.6rem; padding:.7rem .9rem; font-size:.8rem; color:#bfdbfe; margin-bottom:1rem; display:flex; gap:.5rem; align-items:flex-start;}
 .banner .ti{color:var(--blue); font-size:1.1rem; flex-shrink:0;}
 @keyframes spin{to{transform:rotate(360deg)}} .spin{animation:spin 1s linear infinite; display:inline-block;}
+.nat-head{display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-bottom:.55rem;}
+.nat-title{display:flex; align-items:center; gap:.5rem; font-weight:800; font-size:1.05rem;}
+.nat-flag{font-size:1.35rem; line-height:1;}
+.nat-count{font-size:.72rem; font-weight:700; color:var(--muted); background:var(--card2); border:1px solid var(--border); border-radius:999px; padding:.08rem .5rem;}
+.nat-status{display:inline-flex; align-items:center; gap:.3rem; font-size:.74rem; font-weight:700; white-space:nowrap;}
+.nat-status.in{color:var(--green);}
+.nat-status.out{color:var(--red); background:rgba(239,68,68,.12); padding:.2rem .5rem; border-radius:.4rem;}
+.nat-mgr{font-size:.74rem; color:var(--muted); margin-left:auto; white-space:nowrap;}
+.nat-pts{font-size:.85rem; font-weight:800; min-width:30px; text-align:right; margin-left:.55rem;}
+.nat-body.dim{opacity:.5;}
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.7.0/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -379,14 +389,14 @@ async function editPickPrompt(){ if(!state.picks.length){ alert('No picks to edi
 
 /* ===== nav + render ===== */
 const NAV=[{id:'draft',label:'Draft'},{id:'standings',label:'Standings'},{id:'squads',label:'Squads'},
-  {id:'players',label:'Players'},{id:'scoring',label:'Scoring'},{id:'undrafted',label:'Available'},{id:'tools',label:'Commissioner'}];
-const BOTTOM=['standings','squads','players','more'];
+  {id:'players',label:'Players'},{id:'nations',label:'Nations'},{id:'scoring',label:'Scoring'},{id:'undrafted',label:'Available'},{id:'tools',label:'Commissioner'}];
+const BOTTOM=['standings','squads','players','nations','more'];
 function go(page){ ui.page=page; window.scrollTo(0,0); render(); }
 function renderNav(){
   document.getElementById('topNav').innerHTML=NAV.map(n=>`<button class="nav-btn ${ui.page===n.id?'active':''}" onclick="go('${n.id}')">${n.label}</button>`).join('');
-  const bmap={standings:'ti-trophy',squads:'ti-users',players:'ti-list-numbers',more:'ti-dots'};
-  const blab={standings:'Standings',squads:'Squads',players:'Players',more:'More'};
-  const activeMore=!['standings','squads','players'].includes(ui.page);
+  const bmap={standings:'ti-trophy',squads:'ti-users',players:'ti-list-numbers',nations:'ti-flag',more:'ti-dots'};
+  const blab={standings:'Table',squads:'Squads',players:'Players',nations:'Nations',more:'More'};
+  const activeMore=!['standings','squads','players','nations'].includes(ui.page);
   document.getElementById('bottomNav').innerHTML=BOTTOM.map(id=>{
     const act=id==='more'?activeMore:ui.page===id;
     return `<button class="bn-item ${act?'active':''}" onclick="go('${id}')"><i class="ti ${bmap[id]}"></i><span>${blab[id]}</span></button>`;
@@ -400,6 +410,7 @@ function render(){ renderNav(); const v=document.getElementById('view');
   else if(p==='standings') v.innerHTML=viewStandings();
   else if(p==='squads') v.innerHTML=viewSquads();
   else if(p==='players') v.innerHTML=viewPicksLog();
+  else if(p==='nations') v.innerHTML=viewNations();
   else if(p==='scoring') v.innerHTML=viewScoring();
   else if(p==='undrafted') v.innerHTML=viewUndrafted();
   else if(p==='tools') v.innerHTML=viewCommish();
@@ -540,6 +551,41 @@ function playerCard(pk){ const pl=DATA.byId[pk.player_id]; const el=provider.isE
   </div>`; }
 
 /* ===== VIEW: PICKS LOG ===== */
+const NATION_FLAGS={"Algeria":"🇩🇿","Argentina":"🇦🇷","Australia":"🇦🇺","Austria":"🇦🇹","Belgium":"🇧🇪","Bosnia & Herzegovina":"🇧🇦","Brazil":"🇧🇷","Canada":"🇨🇦","Cape Verde":"🇨🇻","Colombia":"🇨🇴","Croatia":"🇭🇷","Curacao":"🇨🇼","Czechia":"🇨🇿","DR Congo":"🇨🇩","Ecuador":"🇪🇨","Egypt":"🇪🇬","England":"🏴󠁧󠁢󠁥󠁮󠁧󠁿","France":"🇫🇷","Germany":"🇩🇪","Ghana":"🇬🇭","Haiti":"🇭🇹","Iran":"🇮🇷","Iraq":"🇮🇶","Ivory Coast":"🇨🇮","Japan":"🇯🇵","Jordan":"🇯🇴","Mexico":"🇲🇽","Morocco":"🇲🇦","Netherlands":"🇳🇱","New Zealand":"🇳🇿","Norway":"🇳🇴","Panama":"🇵🇦","Paraguay":"🇵🇾","Portugal":"🇵🇹","Qatar":"🇶🇦","Saudi Arabia":"🇸🇦","Scotland":"🏴󠁧󠁢󠁳󠁣󠁴󠁿","Senegal":"🇸🇳","South Africa":"🇿🇦","South Korea":"🇰🇷","Spain":"🇪🇸","Sweden":"🇸🇪","Switzerland":"🇨🇭","Tunisia":"🇹🇳","Turkey":"🇹🇷","United States":"🇺🇸","Uruguay":"🇺🇾","Uzbekistan":"🇺🇿"};
+const STAGE_LABEL={group:'Group stage',r32:'Round of 32',r16:'Round of 16',qf:'Quarter-finals',sf:'Semi-finals',final:'Final'};
+function viewNations(){
+  if(!state.picks.length) return emptyState('ti-flag','No nations yet.','Drafted players grouped by country will appear here.');
+  const byNation={};
+  state.picks.forEach(pk=>{ const pl=DATA.byId[pk.player_id]; if(!pl) return; (byNation[pl.team]=byNation[pl.team]||[]).push(pk); });
+  let nations=Object.keys(byNation).map(team=>{
+    const players=byNation[team].map(pk=>({ pk, pl:DATA.byId[pk.player_id], pts:playerTotal(pk.player_id), mp:statsFor(pk.player_id).filter(r=>r.minutes>=1).length }))
+      .sort((a,b)=> b.pts-a.pts || b.mp-a.mp || a.pl.name.localeCompare(b.pl.name));
+    const st=DATA.teamStatus[team];
+    return { team, players, alive:teamAlive(team), stage:st&&st.stage };
+  });
+  nations.sort((a,b)=> (a.alive===b.alive) ? (b.players.length-a.players.length || a.team.localeCompare(b.team)) : (a.alive?-1:1));
+  const cards=nations.map(nt=>{
+    const flag=NATION_FLAGS[nt.team]||'';
+    const status=nt.alive
+      ? `<span class="nat-status in"><i class="ti ti-circle-check"></i>In</span>`
+      : `<span class="nat-status out"><i class="ti ti-circle-x"></i>Knocked out${nt.stage?' · '+(STAGE_LABEL[nt.stage]||nt.stage):''}</span>`;
+    const rows=nt.players.map(x=>{ const pl=x.pl; const m=DATA.order[x.pk.mgrIdx]; const el=provider.isEligible(pl.id);
+      return `<div class="pl-row ${el?'elig':''}">
+        <span class="pos-chip">${pl.position}</span>
+        <span class="pl-name">${esc(pl.name)}</span>
+        <span class="nat-mgr">${m?(m.emoji+' '+esc(m.display_name)):x.pk.manager_slot}</span>
+        <span class="nat-pts">${x.pts}</span>
+      </div>`; }).join('');
+    return `<div class="card nat-card" style="margin-bottom:.8rem">
+      <div class="nat-head">
+        <div class="nat-title">${flag?`<span class="nat-flag">${flag}</span>`:''}<span>${esc(nt.team)}</span><span class="nat-count">${nt.players.length}</span></div>
+        ${status}
+      </div>
+      <div class="nat-body ${nt.alive?'':'dim'}">${rows}</div>
+    </div>`;
+  }).join('');
+  return `<h2 class="page-title">Nations</h2><div>${cards}</div>`;
+}
 function viewPicksLog(){
   if(!state.picks.length) return emptyState('ti-list-numbers','No players yet.','Drafted players appear here once the draft has happened.');
   const rows=state.picks.map(pk=>({
