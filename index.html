@@ -271,13 +271,15 @@ const provider={
     DATA.order=mg.data||[];
     if(ds.data){ DATA.cfg={ picks_per:ds.data.picks_per||11,
       require_gk:(ds.data.require_gk==null?1:ds.data.require_gk),
-      require_underdog:(ds.data.require_underdog==null?2:ds.data.require_underdog) }; }
+      require_underdog:(ds.data.require_underdog==null?2:ds.data.require_underdog),
+      bonus_roster:(ds.data.bonus_roster||null) }; }
   },
   async loadPicks(){ const {data,error}=await sb.from('picks').select('*').order('overall'); if(error) throw error;
     state.picks=(data||[]).map(p=>({ ...p, mgrIdx:DATA.order.findIndex(m=>m.slot===p.manager_slot) })); },
   async insertPick(row){ const {error}=await sb.from('picks').insert(row); if(error) throw error; },
   async delPick(overall,pass){ const {error}=await sb.rpc('commissioner_delete_pick',{p_overall:overall,p_pass:pass}); if(error) throw error; },
   async editPickRpc(overall,newId,pass){ const {error}=await sb.rpc('commissioner_edit_pick',{p_overall:overall,p_new_player_id:newId,p_pass:pass}); if(error) throw error; },
+  async saveBonus(ids){ const {error}=await sb.from('draft_state').update({bonus_roster:ids}).eq('id',1); if(error) throw error; },
   subscribe(cb){ sb.channel('sm2-draft')
     .on('postgres_changes',{event:'*',schema:'public',table:'picks'},cb)
     .on('postgres_changes',{event:'*',schema:'public',table:'managers'},cb)
@@ -388,8 +390,8 @@ async function editPickPrompt(){ if(!state.picks.length){ alert('No picks to edi
 }
 
 /* ===== nav + render ===== */
-const NAV=[{id:'draft',label:'Draft'},{id:'standings',label:'Standings'},{id:'squads',label:'Squads'},
-  {id:'players',label:'Players'},{id:'nations',label:'Nations'},{id:'scoring',label:'Scoring'},{id:'undrafted',label:'Available'},{id:'tools',label:'Commissioner'}];
+const NAV=[{id:'draft',label:'Draft'},{id:'standings',label:'Table'},{id:'squads',label:'Squads'},
+  {id:'players',label:'Players'},{id:'nations',label:'Nations'},{id:'bonus',label:'Undrafted XI'},{id:'scoring',label:'Scoring'},{id:'undrafted',label:'Available'},{id:'tools',label:'Commissioner'}];
 const BOTTOM=['standings','squads','players','nations','more'];
 function go(page){ ui.page=page; window.scrollTo(0,0); render(); }
 function renderNav(){
@@ -411,6 +413,7 @@ function render(){ renderNav(); const v=document.getElementById('view');
   else if(p==='squads') v.innerHTML=viewSquads();
   else if(p==='players') v.innerHTML=viewPicksLog();
   else if(p==='nations') v.innerHTML=viewNations();
+  else if(p==='bonus') v.innerHTML=viewBonus();
   else if(p==='scoring') v.innerHTML=viewScoring();
   else if(p==='undrafted') v.innerHTML=viewUndrafted();
   else if(p==='tools') v.innerHTML=viewCommish();
@@ -612,7 +615,7 @@ function viewStandings(){
         <div class="stand-name">${m.emoji||''} ${esc(m.display_name)}</div>
         <div class="muted" style="font-size:.78rem">${n}/${PER()} picks \u00b7 ${gk}/${DATA.cfg.require_gk} GK \u00b7 ${ud}/${DATA.cfg.require_underdog} UD</div>
       </div></div>`; }).join('');
-    return `<h2 class="page-title">Standings</h2>
+    return `<h2 class="page-title">Table</h2>
       <div class="banner"><i class="ti ti-info-circle"></i><div>Scoring begins when the tournament kicks off on June 11. Until then, this shows each manager's draft progress; live points and the category bars switch on once matches start.</div></div>
       <div class="card">${rows}</div>`;
   }
@@ -629,7 +632,7 @@ function viewStandings(){
         ${seg(d.cat.goals,'var(--orange)')}${seg(d.cat.assists,'var(--blue)')}${seg(d.cat.minutes,'#64748b')}${seg(d.cat.clean,'var(--green)')}
       </div></div>
     </div>`).join('');
-  return `<h2 class="page-title">Standings</h2>
+  return `<h2 class="page-title">Table</h2>
     <div class="card">${rows}
       <div class="stand-key">
         <span class="lg-item"><span class="lg-dot" style="background:var(--orange)"></span>Goals</span>
@@ -661,13 +664,84 @@ function viewScoring(){
   </div>
   <div class="card" style="margin-top:1rem">
     <div class="section-h" style="margin-top:0">Roster requirements</div>
-    <div class="muted" style="font-size:.86rem">Each manager drafts ${PER()} players and must include at least <b style="color:var(--text)">${DATA.cfg.require_gk} goalkeeper</b> and at least <b style="color:var(--text)">${DATA.cfg.require_underdog} players from teams ranked 40th or lower</b>. Points stop accruing once a player's nation is knocked out.</div>
+    <div class="muted" style="font-size:.86rem">Each manager drafts ${PER()} players and must include at least <b style="color:var(--text)">${DATA.cfg.require_gk} goalkeeper</b> and at least <b style="color:var(--text)">${DATA.cfg.require_underdog} players from teams ranked 40th or lower</b>. Points stop accruing once a player's nation is knocked out. <b style="color:var(--text)">The third-place playoff is not scored</b> \u2014 both teams are treated as knocked out at the semi-final stage.</div>
   </div>
   <div class="card" style="margin-top:1rem">
     <div class="section-h" style="margin-top:0">Underdog list (ranked 40th or lower)</div>
     <div class="muted" style="font-size:.84rem; margin-bottom:.7rem">Locked from the <a href="${RANKING_SNAPSHOT.source}" target="_blank" rel="noopener" style="color:var(--blue)">FIFA Men's World Ranking</a>, as of <b style="color:var(--text)">${RANKING_SNAPSHOT.date}</b>. These ${RANKING_SNAPSHOT.eligible.length} nations count toward the requirement.</div>
     <div style="display:flex; flex-wrap:wrap; gap:.35rem">${RANKING_SNAPSHOT.eligible.map(t=>`<span class="pill elig">${t[0]} \u00b7 ${t[1]}</span>`).join('')}</div>
   </div>`;
+}
+
+/* ===== VIEW: UNDRAFTED XI (best undrafted players, freezable) ===== */
+function bonusPool(){
+  const taken=draftedIds();
+  return DATA.players.filter(p=>!taken.has(p.id))
+    .map(p=>({ p, pts:playerTotal(p.id), mp:statsFor(p.id).filter(r=>r.minutes>=1).length }))
+    .sort((a,b)=> b.pts-a.pts || b.mp-a.mp || a.p.name.localeCompare(b.p.name));
+}
+function computeBonusXI(){
+  const sorted=bonusPool(), N=PER(), needGK=DATA.cfg.require_gk, needUD=DATA.cfg.require_underdog;
+  const gkN=t=>t.filter(x=>x.p.position==='GK').length, udN=t=>t.filter(x=>x.p.underdog).length;
+  let team=sorted.slice(0,N);
+  if(gkN(team)>=needGK && udN(team)>=needUD) return team.slice().sort((a,b)=> b.pts-a.pts || b.mp-a.mp);
+  // Rules unmet by the raw top XI: seat the required GK and underdogs first, then fill by points.
+  const chosen=[], used=new Set(); const take=x=>{ if(!used.has(x.p.id)){ chosen.push(x); used.add(x.p.id); } };
+  for(const x of sorted){ if(chosen.filter(c=>c.p.position==='GK').length>=needGK) break; if(x.p.position==='GK') take(x); }
+  for(const x of sorted){ if(chosen.filter(c=>c.p.underdog).length>=needUD) break; if(x.p.underdog) take(x); }
+  for(const x of sorted){ if(chosen.length>=N) break; take(x); }
+  return chosen.slice(0,N).sort((a,b)=> b.pts-a.pts || b.mp-a.mp);
+}
+function bonusFrozen(ids){
+  return ids.map(id=>DATA.byId[id]).filter(Boolean)
+    .map(p=>({ p, pts:playerTotal(p.id), mp:statsFor(p.id).filter(r=>r.minutes>=1).length }))
+    .sort((a,b)=> b.pts-a.pts || b.mp-a.mp);
+}
+function viewBonus(){
+  const locked = DATA.cfg.bonus_roster && DATA.cfg.bonus_roster.length ? DATA.cfg.bonus_roster : null;
+  const entries = locked ? bonusFrozen(locked) : computeBonusXI();
+  if(!entries.length) return emptyState('ti-star','No undrafted players yet.','Once the draft is done, the best undrafted XI shows here.');
+  const total=entries.reduce((s,x)=>s+x.pts,0);
+  const gk=entries.filter(x=>x.p.position==='GK').length, ud=entries.filter(x=>x.p.underdog).length;
+  const gkOk=gk>=DATA.cfg.require_gk, udOk=ud>=DATA.cfg.require_underdog;
+  const rows=entries.map(x=>{ const p=x.p;
+    return `<div class="pl-row ${p.underdog?'elig':''}">
+      <span class="pos-chip">${p.position}</span>
+      <span class="pl-name">${esc(p.name)}<div class="muted" style="font-size:.72rem">${esc(p.team)}</div></span>
+      ${p.underdog?`<span class="pill elig">#${p.team_rank}</span>`:''}
+      <span class="nat-pts">${x.pts}</span>
+    </div>`; }).join('');
+  const bar = locked
+    ? `<div class="muted" style="font-size:.8rem; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap">Roster locked.
+        <button class="btn btn-ghost" onclick="relockBonus()">Re-lock to current best XI</button>
+        <button class="btn btn-ghost" onclick="unlockBonus()">Unlock</button></div>`
+    : `<button class="btn btn-primary" onclick="lockBonus()">Lock this team</button>`;
+  return `<h2 class="page-title">Undrafted XI</h2>
+    <div class="banner"><i class="ti ti-info-circle"></i><div>${locked
+      ? 'The locked team of the best players nobody drafted. The roster is fixed; points keep accruing for players still in the tournament.'
+      : 'Preview of the best undrafted players by points, following the same roster rules (at least '+DATA.cfg.require_gk+' GK and '+DATA.cfg.require_underdog+' underdog). Lock it when you want to freeze the roster.'}</div></div>
+    <div class="card">
+      <div class="squad-head">
+        <div style="font-weight:800; font-size:1.05rem; display:flex; align-items:center; gap:.5rem"><i class="ti ti-star" style="color:var(--orange)"></i> Best Undrafted XI ${locked?'<span class="pill">Locked</span>':'<span class="pill">Preview</span>'}</div>
+        <div class="squad-total">${entries.length} of ${PER()} \u00b7 <span style="color:${gkOk?'var(--green)':'var(--orange)'}">${gk}/${DATA.cfg.require_gk} GK</span> \u00b7 <span style="color:${udOk?'var(--green)':'var(--orange)'}">${ud}/${DATA.cfg.require_underdog} underdog</span> \u00b7 <b style="color:var(--text)">${total} pts</b></div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:.4rem; margin-top:.6rem">${rows}</div>
+      <div style="margin-top:.9rem">${bar}</div>
+    </div>`;
+}
+function lockBonus(){
+  if(!confirm('Lock the current best undrafted XI as the frozen team? Only the commissioner should do this.')) return;
+  const ids=computeBonusXI().map(x=>x.p.id);
+  provider.saveBonus(ids).then(()=>{ DATA.cfg.bonus_roster=ids; render(); }).catch(e=>alert('Could not lock: '+e.message));
+}
+function relockBonus(){
+  if(!confirm('Replace the locked team with the current best undrafted XI?')) return;
+  const ids=computeBonusXI().map(x=>x.p.id);
+  provider.saveBonus(ids).then(()=>{ DATA.cfg.bonus_roster=ids; render(); }).catch(e=>alert(e.message));
+}
+function unlockBonus(){
+  if(!confirm('Unlock the team and go back to a live preview?')) return;
+  provider.saveBonus(null).then(()=>{ DATA.cfg.bonus_roster=null; render(); }).catch(e=>alert(e.message));
 }
 
 /* ===== VIEW: AVAILABLE ===== */
@@ -705,7 +779,7 @@ function viewCommish(){
 
 /* ===== VIEW: MORE (mobile) ===== */
 function viewMore(){
-  const items=[['draft','Draft','ti-clipboard-list'],['scoring','Scoring','ti-calculator'],['undrafted','Available players','ti-user-search'],['tools','Commissioner','ti-settings']];
+  const items=[['bonus','Undrafted XI','ti-star'],['draft','Draft','ti-clipboard-list'],['scoring','Scoring','ti-calculator'],['undrafted','Available players','ti-user-search'],['tools','Commissioner','ti-settings']];
   return `<h2 class="page-title">More</h2><div class="card" style="padding:.4rem">
     ${items.map(it=>`<button class="btn btn-ghost" style="width:100%;text-align:left;margin:.25rem 0;display:flex;align-items:center;gap:.6rem" onclick="go('${it[0]}')"><i class="ti ${it[2]}" style="font-size:1.2rem"></i>${it[1]}</button>`).join('')}
   </div>`;
